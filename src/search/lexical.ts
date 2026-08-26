@@ -18,6 +18,10 @@ export interface LexicalSearchHit {
   sourceName: string;
   sourceTier: number;
   bm25Rank: number;
+  repository?: string;
+  revision?: string;
+  canonicalUrl?: string;
+  revisionUrl?: string;
   apiPackage?: string;
   apiVersion?: string;
   minecraftVersion?: string;
@@ -39,6 +43,10 @@ interface LexicalRow {
   source_name: string;
   source_tier: number;
   bm25_rank: number;
+  repository: string | null;
+  revision: string | null;
+  canonical_url: string | null;
+  revision_url: string | null;
   api_package: string | null;
   api_version: string | null;
   minecraft_version: string | null;
@@ -83,6 +91,10 @@ export function lexicalSearch(database: DatabaseSync, query: string, limit = 50)
       s.name AS source_name,
       s.tier AS source_tier,
       bm25(chunks_fts, 12.0, 6.0, 4.0, 10.0, 1.0, 2.0) AS bm25_rank,
+      d.repository,
+      d.revision,
+      d.canonical_url,
+      d.revision_url,
       d.api_package,
       d.api_version,
       d.minecraft_version
@@ -111,6 +123,10 @@ export function lexicalSearch(database: DatabaseSync, query: string, limit = 50)
     sourceName: row.source_name,
     sourceTier: row.source_tier,
     bm25Rank: row.bm25_rank,
+    ...(row.repository ? { repository: row.repository } : {}),
+    ...(row.revision ? { revision: row.revision } : {}),
+    ...(row.canonical_url ? { canonicalUrl: row.canonical_url } : {}),
+    ...(row.revision_url ? { revisionUrl: row.revision_url } : {}),
     ...(row.api_package ? { apiPackage: row.api_package } : {}),
     ...(row.api_version ? { apiVersion: row.api_version } : {}),
     ...(row.minecraft_version ? { minecraftVersion: row.minecraft_version } : {}),
