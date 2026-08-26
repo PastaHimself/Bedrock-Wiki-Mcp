@@ -21,7 +21,7 @@ export function openDatabase(path: string, options: OpenDatabaseOptions = {}): D
     timeout,
   });
 
-  database.exec("PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;");
+  database.exec(`PRAGMA foreign_keys = ON; PRAGMA busy_timeout = ${timeout};`);
   if (mode === "readonly") {
     database.exec("PRAGMA query_only = ON;");
   } else {
