@@ -53,7 +53,8 @@ export class IndexRepository {
   replaceDocument(document: ParsedDocument): string {
     const { metadata } = document;
     const documentPublicId = stablePublicId("doc", metadata.source.id, metadata.path);
-    this.#database.exec("BEGIN IMMEDIATE");
+    const ownsTransaction = !this.#database.isTransaction;
+    if (ownsTransaction) this.#database.exec("BEGIN IMMEDIATE");
 
     try {
       this.upsertSource(metadata.source);
@@ -161,37 +162,44 @@ export class IndexRepository {
         INSERT INTO index_meta(key, value) VALUES ('last_document_write', ?)
         ON CONFLICT(key) DO UPDATE SET value = excluded.value
       `).run(new Date().toISOString());
-      this.#database.exec("COMMIT");
+      if (ownsTransaction) this.#database.exec("COMMIT");
       return documentPublicId;
     } catch (error) {
-      if (this.#database.isTransaction) this.#database.exec("ROLLBACK");
+      if (ownsTransaction && this.#database.isTransaction) this.#database.exec("ROLLBACK");
       throw error;
     }
   }
 
   removeDocument(sourceId: string, path: string): boolean {
-    this.#database.exec("BEGIN IMMEDIATE");
+    const ownsTransaction = !this.#database.isTransaction;
+    if (ownsTransaction) this.#database.exec("BEGIN IMMEDIATE");
     try {
       const removed = this.#deleteDocumentRows(sourceId, path);
-      this.#database.exec("COMMIT");
+      if (ownsTransaction) this.#database.exec("COMMIT");
       return removed;
     } catch (error) {
-      if (this.#database.isTransaction) this.#database.exec("ROLLBACK");
+      if (ownsTransaction && this.#database.isTransaction) this.#database.exec("ROLLBACK");
       throw error;
     }
   }
 
   clearIndex(): void {
-    this.#database.exec(`
-      BEGIN IMMEDIATE;
-      DELETE FROM chunks_fts;
-      DELETE FROM documents;
-      DELETE FROM source_revisions;
-      DELETE FROM sources;
-      DELETE FROM symbol_edges;
-      DELETE FROM index_meta WHERE key <> 'schema_version';
-      COMMIT;
-    `);
+    const ownsTransaction = !this.#database.isTransaction;
+    if (ownsTransaction) this.#database.exec("BEGIN IMMEDIATE");
+    try {
+      this.#database.exec(`
+        DELETE FROM chunks_fts;
+        DELETE FROM documents;
+        DELETE FROM source_revisions;
+        DELETE FROM sources;
+        DELETE FROM symbol_edges;
+        DELETE FROM index_meta WHERE key <> 'schema_version';
+      `);
+      if (ownsTransaction) this.#database.exec("COMMIT");
+    } catch (error) {
+      if (ownsTransaction && this.#database.isTransaction) this.#database.exec("ROLLBACK");
+      throw error;
+    }
   }
 
   #deleteDocumentRows(sourceId: string, path: string): boolean {
