@@ -46,6 +46,20 @@ describe("remote HTTP security", () => {
     expect(health.status).toBe(200);
   });
 
+  it("counts failed authentication attempts against the client rate budget", async () => {
+    const base = await start(testConfig({
+      bearerToken: "0123456789abcdef",
+      rateLimitPerMinute: 1,
+    }));
+
+    const first = await fetch(`${base}/mcp`, { method: "POST" });
+    expect(first.status).toBe(401);
+
+    const second = await fetch(`${base}/mcp`, { method: "POST" });
+    expect(second.status).toBe(429);
+    await expect(second.json()).resolves.toEqual({ error: "rate_limited" });
+  });
+
   it("rejects disallowed Host and Origin headers before MCP dispatch", async () => {
     const hostBase = await start(testConfig({ allowedHosts: ["bedrock-mcp.example.com"] }));
     const hostRejected = await fetch(`${hostBase}/mcp`, { method: "POST" });
