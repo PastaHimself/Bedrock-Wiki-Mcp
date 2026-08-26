@@ -1,18 +1,27 @@
 import { normalizeIdentifier } from "./normalize.js";
 
-const MINECRAFT_IDENTIFIER = /\bminecraft:[A-Za-z0-9_.:-]+\b/g;
+const MINECRAFT_IDENTIFIER = /\bminecraft:[A-Za-z0-9_]+(?:[.-][A-Za-z0-9_]+)*\b/g;
 const NPM_PACKAGE = /@minecraft\/[A-Za-z0-9_-]+/g;
 const DOTTED_IDENTIFIER = /\b(?:[A-Za-z_$][\w$]*\.)+[A-Za-z_$][\w$]*\b/g;
-const PASCAL_IDENTIFIER = /\b[A-Z][A-Za-z0-9]*(?:AfterEvent|BeforeEvent|EventSignal|Component|Controller|Options|Interface|Class)?\b/g;
+const PASCAL_API_IDENTIFIER = /\b[A-Z][A-Za-z0-9]*(?:AfterEvent|BeforeEvent|EventSignal|Component|Controller|Options|Error|Event|Signal)\b/g;
+const BACKTICK_TYPE = /`([A-Z][A-Za-z0-9]*(?:\.[A-Za-z_$][\w$]*)?)`/g;
+const MARKDOWN_TYPE_LINK = /\[([A-Z][A-Za-z0-9]+)\]\([^)]*\.md(?:#[^)]*)?\)/g;
 
 export function extractIdentifiers(text: string): string[] {
   const values = new Map<string, string>();
+  const add = (value: string): void => {
+    const normalized = normalizeIdentifier(value);
+    if (normalized.length > 1 && !values.has(normalized)) values.set(normalized, value);
+  };
 
-  for (const regex of [MINECRAFT_IDENTIFIER, NPM_PACKAGE, DOTTED_IDENTIFIER, PASCAL_IDENTIFIER]) {
+  for (const regex of [MINECRAFT_IDENTIFIER, NPM_PACKAGE, DOTTED_IDENTIFIER, PASCAL_API_IDENTIFIER]) {
+    for (const match of text.matchAll(regex)) add(match[0]);
+  }
+
+  for (const regex of [BACKTICK_TYPE, MARKDOWN_TYPE_LINK]) {
     for (const match of text.matchAll(regex)) {
-      const value = match[0];
-      const normalized = normalizeIdentifier(value);
-      if (normalized.length > 1 && !values.has(normalized)) values.set(normalized, value);
+      const captured = match[1];
+      if (captured) add(captured);
     }
   }
 
