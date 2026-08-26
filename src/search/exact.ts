@@ -4,6 +4,7 @@ import { normalizeIdentifier } from "../identifiers/normalize.js";
 export interface ExactIdentifierHit {
   chunkId: string;
   documentId: string;
+  ordinal: number;
   identifier: string;
   title: string;
   content: string;
@@ -29,6 +30,7 @@ export interface ExactIdentifierHit {
 interface ExactIdentifierRow {
   chunk_id: string;
   document_id: string;
+  ordinal: number;
   identifier: string;
   title: string;
   content: string;
@@ -70,6 +72,7 @@ export function exactIdentifierSearch(
     SELECT
       c.chunk_id,
       d.document_id,
+      c.ordinal,
       i.identifier,
       c.title,
       c.content,
@@ -118,6 +121,7 @@ export function exactIdentifierSearch(
   return rows.map((row) => ({
     chunkId: row.chunk_id,
     documentId: row.document_id,
+    ordinal: row.ordinal,
     identifier: row.identifier,
     title: row.title,
     content: row.content,
