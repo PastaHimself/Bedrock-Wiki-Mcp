@@ -1,5 +1,5 @@
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { toNodeHandler } from "@modelcontextprotocol/node";
+import { createServer, type Server, type ServerResponse } from "node:http";
+import { toNodeHandler, type NodeIncomingMessageLike } from "@modelcontextprotocol/node";
 import { createMcpHandler } from "@modelcontextprotocol/server";
 import type { AppConfig } from "./config.js";
 import { HEALTH_PATH, MCP_PATH, SERVICE_NAME, SERVICE_VERSION } from "./constants.js";
@@ -28,16 +28,11 @@ export function createHttpServer(): Server {
     }
 
     if (url.pathname === MCP_PATH) {
-      if (!request.method) {
-        writeJson(response, 400, { error: "missing_http_method" });
-        return;
-      }
-
       try {
-        // The MCP Node adapter targets IncomingMessage at runtime, but its structural
-        // type requires `method` to be non-optional. The guard above establishes it.
-        const mcpRequest = request as IncomingMessage & { method: string };
-        await nodeMcpHandler(mcpRequest, response);
+        // @modelcontextprotocol/node is explicitly designed for Node IncomingMessage.
+        // Its duck type and @types/node disagree under exactOptionalPropertyTypes,
+        // so keep the compatibility assertion isolated at this adapter boundary.
+        await nodeMcpHandler(request as unknown as NodeIncomingMessageLike, response);
       } catch (error) {
         console.error("MCP request failed", error);
         if (!response.headersSent) {
