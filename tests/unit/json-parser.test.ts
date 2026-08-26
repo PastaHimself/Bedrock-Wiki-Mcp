@@ -19,6 +19,18 @@ describe("Bedrock JSON parser", () => {
     expect(health?.content).toContain("minecraft:health");
   });
 
+  it("uses custom entity event keys as primary chunk identifiers", () => {
+    const parsed = parseBedrockJson(JSON.stringify({
+      "minecraft:entity": {
+        description: { identifier: "example:mob" },
+        events: { on_spawn: { add: { component_groups: ["ready"] } } },
+      },
+    }), "behavior_pack/entities/mob.json");
+    const event = parsed.chunks.find((chunk) => chunk.symbolKind === "event");
+    expect(event?.identifier).toBe("on_spawn");
+    expect(event?.identifiers).toContain("example:mob");
+  });
+
   it("chunks animation controllers independently", () => {
     const parsed = parseBedrockJson(JSON.stringify({ animation_controllers: {
       "controller.animation.example": { initial_state: "default", states: { default: {} } },
