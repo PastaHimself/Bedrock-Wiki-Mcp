@@ -5,6 +5,7 @@ const QUERY_TOKEN = /[\p{L}\p{N}_@.$:-]+/gu;
 export interface LexicalSearchHit {
   chunkId: string;
   documentId: string;
+  ordinal: number;
   title: string;
   identifier?: string;
   content: string;
@@ -30,6 +31,7 @@ export interface LexicalSearchHit {
 interface LexicalRow {
   chunk_id: string;
   document_id: string;
+  ordinal: number;
   title: string;
   identifier: string | null;
   content: string;
@@ -78,6 +80,7 @@ export function lexicalSearch(database: DatabaseSync, query: string, limit = 50)
     SELECT
       c.chunk_id,
       d.document_id,
+      c.ordinal,
       c.title,
       c.identifier,
       c.content,
@@ -110,6 +113,7 @@ export function lexicalSearch(database: DatabaseSync, query: string, limit = 50)
   return rows.map((row) => ({
     chunkId: row.chunk_id,
     documentId: row.document_id,
+    ordinal: row.ordinal,
     title: row.title,
     ...(row.identifier ? { identifier: row.identifier } : {}),
     content: row.content,
