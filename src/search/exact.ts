@@ -1,0 +1,126 @@
+import type { DatabaseSync } from "node:sqlite";
+import { normalizeIdentifier } from "../identifiers/normalize.js";
+
+export interface ExactIdentifierHit {
+  chunkId: string;
+  documentId: string;
+  identifier: string;
+  title: string;
+  content: string;
+  path: string;
+  kind: string;
+  category: string;
+  stability: string;
+  lifecycle: string;
+  channel: string;
+  sourceId: string;
+  sourceName: string;
+  sourceTier: number;
+  isPrimary: boolean;
+  apiPackage?: string;
+  apiVersion?: string;
+  minecraftVersion?: string;
+}
+
+interface ExactIdentifierRow {
+  chunk_id: string;
+  document_id: string;
+  identifier: string;
+  title: string;
+  content: string;
+  path: string;
+  kind: string;
+  category: string;
+  stability: string;
+  lifecycle: string;
+  channel: string;
+  source_id: string;
+  source_name: string;
+  source_tier: number;
+  is_primary: number;
+  api_package: string | null;
+  api_version: string | null;
+  minecraft_version: string | null;
+}
+
+function validateLimit(limit: number): number {
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50) {
+    throw new RangeError("limit must be an integer between 1 and 50");
+  }
+  return limit;
+}
+
+export function exactIdentifierSearch(
+  database: DatabaseSync,
+  identifier: string,
+  limit = 10,
+): ExactIdentifierHit[] {
+  const normalized = normalizeIdentifier(identifier);
+  if (normalized.length === 0) throw new Error("identifier must not be empty");
+
+  const rows = database.prepare(`
+    SELECT
+      c.chunk_id,
+      d.document_id,
+      i.identifier,
+      c.title,
+      c.content,
+      d.path,
+      d.kind,
+      d.category,
+      c.stability,
+      c.lifecycle,
+      d.channel,
+      s.id AS source_id,
+      s.name AS source_name,
+      s.tier AS source_tier,
+      i.is_primary,
+      d.api_package,
+      d.api_version,
+      d.minecraft_version
+    FROM identifiers i
+    JOIN chunks c ON c.id = i.chunk_id
+    JOIN documents d ON d.id = c.document_id
+    JOIN sources s ON s.id = d.source_id
+    WHERE i.normalized = ?
+    ORDER BY
+      i.is_primary DESC,
+      CASE c.lifecycle
+        WHEN 'active' THEN 0
+        WHEN 'deprecated' THEN 1
+        WHEN 'historical' THEN 2
+        ELSE 3
+      END,
+      CASE c.stability
+        WHEN 'stable' THEN 0
+        WHEN 'beta' THEN 1
+        WHEN 'experimental' THEN 2
+        ELSE 3
+      END,
+      CASE d.channel WHEN 'stable' THEN 0 WHEN 'preview' THEN 1 ELSE 2 END,
+      s.tier ASC,
+      c.ordinal ASC
+    LIMIT ?
+  `).all(normalized, validateLimit(limit)) as unknown as ExactIdentifierRow[];
+
+  return rows.map((row) => ({
+    chunkId: row.chunk_id,
+    documentId: row.document_id,
+    identifier: row.identifier,
+    title: row.title,
+    content: row.content,
+    path: row.path,
+    kind: row.kind,
+    category: row.category,
+    stability: row.stability,
+    lifecycle: row.lifecycle,
+    channel: row.channel,
+    sourceId: row.source_id,
+    sourceName: row.source_name,
+    sourceTier: row.source_tier,
+    isPrimary: row.is_primary === 1,
+    ...(row.api_package ? { apiPackage: row.api_package } : {}),
+    ...(row.api_version ? { apiVersion: row.api_version } : {}),
+    ...(row.minecraft_version ? { minecraftVersion: row.minecraft_version } : {}),
+  }));
+}
