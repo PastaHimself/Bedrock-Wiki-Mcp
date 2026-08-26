@@ -1,0 +1,47 @@
+{
+  "sources": [
+    {
+      "id": "ms_creator_docs",
+      "name": "Microsoft Minecraft Creator Documentation",
+      "type": "git",
+      "tier": 1,
+      "repository": "https://github.com/MicrosoftDocs/minecraft-creator.git",
+      "branch": "main",
+      "channel": "stable",
+      "include": [
+        "creator/Documents/**",
+        "creator/Reference/**",
+        "creator/ScriptAPI/**",
+        "creator/PriorScriptAPI/**"
+      ]
+    },
+    {
+      "id": "bedrock_samples_stable",
+      "name": "Mojang Bedrock Samples (Stable)",
+      "type": "git",
+      "tier": 2,
+      "repository": "https://github.com/Mojang/bedrock-samples.git",
+      "branch": "main",
+      "channel": "stable"
+    },
+    {
+      "id": "bedrock_samples_preview",
+      "name": "Mojang Bedrock Samples (Preview)",
+      "type": "git",
+      "tier": 2,
+      "repository": "https://github.com/Mojang/bedrock-samples.git",
+      "branch": "preview",
+      "channel": "preview",
+      "defaultEnabled": false
+    },
+    {
+      "id": "minecraft_samples",
+      "name": "Microsoft Minecraft Samples",
+      "type": "git",
+      "tier": 2,
+      "repository": "https://github.com/microsoft/minecraft-samples.git",
+      "branch": "main",
+      "channel": "stable"
+    }
+  ]
+}
