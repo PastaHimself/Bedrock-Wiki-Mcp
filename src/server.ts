@@ -106,6 +106,12 @@ export async function listen(server: Server, config: AppConfig): Promise<void> {
 }
 
 export async function close(server: Server): Promise<void> {
+  const handler = handlers.get(server);
+  if (handler) {
+    await handler.close();
+    handlers.delete(server);
+  }
+
   if (server.listening) {
     await new Promise<void>((resolvePromise, rejectPromise) => {
       server.close((error) => {
@@ -116,11 +122,5 @@ export async function close(server: Server): Promise<void> {
         resolvePromise();
       });
     });
-  }
-
-  const handler = handlers.get(server);
-  if (handler) {
-    await handler.close();
-    handlers.delete(server);
   }
 }
