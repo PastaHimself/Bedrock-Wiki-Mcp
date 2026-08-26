@@ -1,8 +1,15 @@
 import type { DatabaseSync } from "node:sqlite";
-import type { DocumentKind } from "../models/enums.js";
 import { normalizeIdentifier } from "../identifiers/normalize.js";
+import type { DocumentKind } from "../models/enums.js";
 import { exactIdentifierSearch, type ExactIdentifierHit } from "./exact.js";
 import { lexicalSearch, type LexicalSearchHit } from "./lexical.js";
+
+const PREVIEW_INTENT = /\b(?:preview|beta|experimental)\b/i;
+const HISTORICAL_INTENT = /\b(?:historical|legacy|old\s+api|prior\s+api)\b/i;
+const STOP_WORDS = new Set([
+  "a", "an", "and", "are", "as", "at", "be", "by", "do", "does", "for", "from",
+  "how", "i", "in", "is", "it", "make", "of", "on", "the", "to", "use", "when", "with",
+]);
 
 export interface KnowledgeSearchOptions {
   query: string;
@@ -52,7 +59,7 @@ export interface KnowledgeSearchResponse {
 
 type Candidate = KnowledgeSearchResult & { rawContent: string };
 
-function validateOptions(options: KnowledgeSearchOptions): Required<Pick<KnowledgeSearchOptions, "limit" | "includePreview" | "includeHistorical" | "maxChars">> {
+function validateOptions(options: KnowledgeSearchOptions): { limit: number; maxChars: number } {
   const limit = options.limit ?? 5;
   const maxChars = options.maxChars ?? 10_000;
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 10) throw new RangeError("limit must be an integer between 1 and 10");
@@ -64,12 +71,7 @@ function validateOptions(options: KnowledgeSearchOptions): Required<Pick<Knowled
   for (const tier of options.sourceTiers ?? []) {
     if (!Number.isSafeInteger(tier) || tier < 1 || tier > 4) throw new RangeError("sourceTiers values must be integers from 1 to 4");
   }
-  return {
-    limit,
-    maxChars,
-    includePreview: options.includePreview ?? false,
-    includeHistorical: options.includeHistorical ?? false,
-  };
+  return { limit, maxChars };
 }
 
 function metadataBonus(candidate: Pick<Candidate, "sourceTier" | "stability" | "lifecycle" | "channel">): number {
@@ -154,6 +156,29 @@ function candidateAllowed(candidate: Candidate, options: KnowledgeSearchOptions,
   return true;
 }
 
+function meaningfulQueryTerms(query: string): string[] {
+  const raw = query.toLocaleLowerCase().match(/[\p{L}\p{N}_@.$:-]+/gu) ?? [];
+  return [...new Set(raw.filter((term) => term.length > 1 && !STOP_WORDS.has(term)))].slice(0, 6);
+}
+
+function fallbackLexicalSearch(database: DatabaseSync, query: string): LexicalSearchHit[] {
+  const accumulated = new Map<string, { hit: LexicalSearchHit; score: number }>();
+  for (const term of meaningfulQueryTerms(query)) {
+    for (const [rank, hit] of lexicalSearch(database, term, 15).entries()) {
+      const existing = accumulated.get(hit.chunkId);
+      if (existing) {
+        existing.score += 1 / (rank + 1);
+      } else {
+        accumulated.set(hit.chunkId, { hit, score: 1 / (rank + 1) });
+      }
+    }
+  }
+  return [...accumulated.values()]
+    .sort((a, b) => b.score - a.score || a.hit.bm25Rank - b.hit.bm25Rank)
+    .map((entry) => entry.hit)
+    .slice(0, 50);
+}
+
 function excerptFor(content: string, query: string, maxLength = 1_600): string {
   if (content.length <= maxLength) return content;
   const queryTerms = query.toLocaleLowerCase().match(/[\p{L}\p{N}_@.$:-]+/gu) ?? [];
@@ -166,16 +191,46 @@ function excerptFor(content: string, query: string, maxLength = 1_600): string {
   if (index < 0) return `${content.slice(0, maxLength - 1).trimEnd()}…`;
   const before = Math.floor(maxLength * 0.3);
   let start = Math.max(0, index - before);
-  let end = Math.min(content.length, start + maxLength);
+  const end = Math.min(content.length, start + maxLength);
   if (end === content.length) start = Math.max(0, end - maxLength);
   const prefix = start > 0 ? "…" : "";
   const suffix = end < content.length ? "…" : "";
   return `${prefix}${content.slice(start, end).trim()}${suffix}`;
 }
 
+function publicResult(candidate: Candidate, excerpt: string): KnowledgeSearchResult {
+  return {
+    chunkId: candidate.chunkId,
+    documentId: candidate.documentId,
+    title: candidate.title,
+    ...(candidate.identifier ? { identifier: candidate.identifier } : {}),
+    excerpt,
+    path: candidate.path,
+    kind: candidate.kind,
+    category: candidate.category,
+    stability: candidate.stability,
+    lifecycle: candidate.lifecycle,
+    channel: candidate.channel,
+    sourceId: candidate.sourceId,
+    sourceName: candidate.sourceName,
+    sourceTier: candidate.sourceTier,
+    score: Number(candidate.score.toFixed(3)),
+    exactMatch: candidate.exactMatch,
+    ...(candidate.repository ? { repository: candidate.repository } : {}),
+    ...(candidate.revision ? { revision: candidate.revision } : {}),
+    ...(candidate.canonicalUrl ? { canonicalUrl: candidate.canonicalUrl } : {}),
+    ...(candidate.revisionUrl ? { revisionUrl: candidate.revisionUrl } : {}),
+    ...(candidate.apiPackage ? { apiPackage: candidate.apiPackage } : {}),
+    ...(candidate.apiVersion ? { apiVersion: candidate.apiVersion } : {}),
+    ...(candidate.minecraftVersion ? { minecraftVersion: candidate.minecraftVersion } : {}),
+  };
+}
+
 export function searchKnowledge(database: DatabaseSync, options: KnowledgeSearchOptions): KnowledgeSearchResponse {
   const validated = validateOptions(options);
   const query = options.query.trim();
+  const includePreview = options.includePreview ?? PREVIEW_INTENT.test(query);
+  const includeHistorical = options.includeHistorical ?? HISTORICAL_INTENT.test(query);
   const candidates = new Map<string, Candidate>();
 
   for (const [rank, hit] of exactIdentifierSearch(database, query, 30).entries()) {
@@ -186,6 +241,9 @@ export function searchKnowledge(database: DatabaseSync, options: KnowledgeSearch
   let lexicalHits: LexicalSearchHit[] = [];
   try {
     lexicalHits = lexicalSearch(database, query, 50);
+    if (lexicalHits.length === 0 && meaningfulQueryTerms(query).length > 1) {
+      lexicalHits = fallbackLexicalSearch(database, query);
+    }
   } catch (error) {
     if (candidates.size === 0) throw error;
   }
@@ -201,7 +259,7 @@ export function searchKnowledge(database: DatabaseSync, options: KnowledgeSearch
 
   const normalizedQuery = normalizeIdentifier(query);
   const filtered = [...candidates.values()]
-    .filter((candidate) => candidateAllowed(candidate, options, validated.includePreview, validated.includeHistorical))
+    .filter((candidate) => candidateAllowed(candidate, options, includePreview, includeHistorical))
     .map((candidate) => {
       if (candidate.identifier && normalizeIdentifier(candidate.identifier) === normalizedQuery) candidate.score += 20;
       return candidate;
@@ -227,8 +285,7 @@ export function searchKnowledge(database: DatabaseSync, options: KnowledgeSearch
       break;
     }
     const excerpt = excerptFor(candidate.rawContent, query, Math.min(1_600, remaining));
-    const { rawContent: _rawContent, ...result } = candidate;
-    results.push({ ...result, excerpt, score: Number(result.score.toFixed(3)) });
+    results.push(publicResult(candidate, excerpt));
     totalChars += excerpt.length;
     perDocument.set(candidate.documentId, usedFromDocument + 1);
   }
