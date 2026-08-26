@@ -53,6 +53,11 @@ function database() {
     }),
   }));
   repository.replaceDocument(ingestDocument({
+    source: official,
+    path: "creator/Documents/item-use-events.md",
+    content: "# Item Use Events\n## Listen for item use events\nItem use events let scripts detect when an item is used.\n## React to item use events\nItem use events can trigger custom gameplay logic.",
+  }));
+  repository.replaceDocument(ingestDocument({
     source: preview,
     path: "creator/ScriptAPI/minecraft/server/SystemPreview.md",
     content: "# System Class\n## Methods\n::: moniker range=\"=minecraft-bedrock-experimental\"\n### **runInterval**\n`runInterval(callback: () => void): number;`\nPreview behavior.\n::: moniker-end",
@@ -80,9 +85,25 @@ describe("knowledge retrieval", () => {
     expect(result.results[0]?.excerpt).toContain("minecraft:health");
   });
 
-  it("allows preview results only when explicitly requested", () => {
-    const result = searchKnowledge(database(), { query: "System.runInterval", includePreview: true, limit: 10 });
-    expect(result.results.some((hit) => hit.channel === "preview")).toBe(true);
+  it("merges already-relevant adjacent chunks without losing the primary chunk ID", () => {
+    const result = searchKnowledge(database(), { query: "item use events", maxChars: 4000 });
+    const merged = result.results.find((hit) => (hit.mergedChunkIds?.length ?? 0) > 0);
+    expect(merged).toBeDefined();
+    expect(merged?.chunkId).toMatch(/^chk_[a-f0-9]{24}$/);
+    expect(merged?.mergedChunkIds).toHaveLength(2);
+    expect(new Set(merged?.mergedChunkIds).size).toBe(2);
+    expect(merged?.mergedChunkIds).not.toContain(merged?.chunkId);
+    expect(merged?.excerpt).toContain("Listen for item use events");
+    expect(merged?.excerpt).toContain("React to item use events");
+    expect(result.totalChars).toBeLessThanOrEqual(4000);
+  });
+
+  it("allows preview results when explicitly requested or clearly requested by query intent", () => {
+    const explicit = searchKnowledge(database(), { query: "System.runInterval", includePreview: true, limit: 10 });
+    expect(explicit.results.some((hit) => hit.channel === "preview")).toBe(true);
+
+    const inferred = searchKnowledge(database(), { query: "experimental System runInterval", limit: 10 });
+    expect(inferred.results.some((hit) => hit.channel === "preview")).toBe(true);
   });
 
   it("fetches only controlled IDs and includes bounded adjacent chunk context", () => {
@@ -121,7 +142,7 @@ describe("knowledge retrieval", () => {
     const db = database();
     const sources = listKnowledgeSources(db);
     expect(sources.find((source) => source.id === "official")?.tier).toBe(1);
-    expect(sources.find((source) => source.id === "official")?.documents).toBe(2);
+    expect(sources.find((source) => source.id === "official")?.documents).toBe(3);
 
     const categories = listKnowledgeCategories(db);
     expect(categories.some((category) => category.id === "script_api")).toBe(true);
