@@ -26,24 +26,31 @@ export async function rebuildLocalIndex(
     ...(options.extensions !== undefined ? { extensions: options.extensions } : {}),
   });
 
-  repository.clearIndex();
-  let chunksIndexed = 0;
-  let identifiersIndexed = 0;
-  for (const document of documents) {
-    repository.replaceDocument(document);
-    chunksIndexed += document.chunks.length;
-    identifiersIndexed += document.chunks.reduce((count, chunk) => count + new Set(chunk.identifiers).size, 0);
-  }
+  database.exec("BEGIN IMMEDIATE");
+  try {
+    repository.clearIndex();
+    let chunksIndexed = 0;
+    let identifiersIndexed = 0;
+    for (const document of documents) {
+      repository.replaceDocument(document);
+      chunksIndexed += document.chunks.length;
+      identifiersIndexed += document.chunks.reduce((count, chunk) => count + new Set(chunk.identifiers).size, 0);
+    }
 
-  const validation = validateIndex(database);
-  if (!validation.ok) {
-    throw new Error(`Index validation failed after rebuild: ${validation.errors.join("; ")}`);
-  }
+    const validation = validateIndex(database);
+    if (!validation.ok) {
+      throw new Error(`Index validation failed after rebuild: ${validation.errors.join("; ")}`);
+    }
 
-  return {
-    documentsIndexed: documents.length,
-    chunksIndexed,
-    identifiersIndexed,
-    validation,
-  };
+    database.exec("COMMIT");
+    return {
+      documentsIndexed: documents.length,
+      chunksIndexed,
+      identifiersIndexed,
+      validation,
+    };
+  } catch (error) {
+    if (database.isTransaction) database.exec("ROLLBACK");
+    throw error;
+  }
 }
