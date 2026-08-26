@@ -10,10 +10,17 @@ export interface IndexValidationReport {
   chunks: number;
   identifiers: number;
   ftsRows: number;
+  missingFtsRows: number;
+  orphanFtsRows: number;
 }
 
 function count(database: DatabaseSync, table: string): number {
   const row = database.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get() as { count: number } | undefined;
+  return row?.count ?? 0;
+}
+
+function scalarCount(database: DatabaseSync, sql: string): number {
+  const row = database.prepare(sql).get() as { count: number } | undefined;
   return row?.count ?? 0;
 }
 
@@ -33,8 +40,22 @@ export function validateIndex(database: DatabaseSync): IndexValidationReport {
   const chunks = count(database, "chunks");
   const identifiers = count(database, "identifiers");
   const ftsRows = count(database, "chunks_fts");
+  const missingFtsRows = scalarCount(database, `
+    SELECT COUNT(*) AS count
+    FROM chunks c
+    LEFT JOIN chunks_fts f ON f.rowid = c.id
+    WHERE f.rowid IS NULL
+  `);
+  const orphanFtsRows = scalarCount(database, `
+    SELECT COUNT(*) AS count
+    FROM chunks_fts f
+    LEFT JOIN chunks c ON c.id = f.rowid
+    WHERE c.id IS NULL
+  `);
 
   if (chunks !== ftsRows) errors.push(`FTS row count ${ftsRows} does not match chunk count ${chunks}`);
+  if (missingFtsRows > 0) errors.push(`FTS index is missing ${missingFtsRows} chunk row(s)`);
+  if (orphanFtsRows > 0) errors.push(`FTS index contains ${orphanFtsRows} orphan row(s)`);
 
   return {
     ok: errors.length === 0,
@@ -45,5 +66,7 @@ export function validateIndex(database: DatabaseSync): IndexValidationReport {
     chunks,
     identifiers,
     ftsRows,
+    missingFtsRows,
+    orphanFtsRows,
   };
 }
