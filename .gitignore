@@ -1,0 +1,22 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+
+# Runtime/index data
+data/*
+!data/.gitkeep
+# SQLite runtime files
+*.db
+*.db-shm
+*.db-wal
+
+# Logs and temporary files
+*.log
+logs/
+tmp/
+.DS_Store
+.vscode/
+.idea/
+coverage/

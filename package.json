@@ -1,0 +1,33 @@
+{
+  "name": "bedrock-wiki-mcp",
+  "version": "0.1.0",
+  "description": "Self-hosted read-only Minecraft Bedrock Edition knowledge MCP server",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "bin": {
+    "bedrock-mcp": "./dist/index.js"
+  },
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/index.js serve",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "npm run typecheck && npm run test && npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/node": "2.0.0",
+    "@modelcontextprotocol/server": "2.0.0",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "24.11.2",
+    "tsx": "4.23.12",
+    "typescript": "6.0.3",
+    "vitest": "4.1.11"
+  }
+}

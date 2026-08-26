@@ -1,0 +1,6 @@
+{
+  "mob": ["entity"],
+  "mob chase": ["nearest_attackable_target", "target"],
+  "item use": ["itemUse"],
+  "manifest script": ["script module", "manifest.json"]
+}

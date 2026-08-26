@@ -1,0 +1,26 @@
+{
+  "categories": [
+    "documentation",
+    "script_api",
+    "behavior_packs",
+    "resource_packs",
+    "entities",
+    "blocks",
+    "items",
+    "recipes",
+    "loot_tables",
+    "spawn_rules",
+    "features",
+    "structures",
+    "particles",
+    "sounds",
+    "animations",
+    "animation_controllers",
+    "render_controllers",
+    "molang",
+    "json_ui",
+    "manifests",
+    "gametest",
+    "samples"
+  ]
+}
