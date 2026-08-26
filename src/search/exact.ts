@@ -17,6 +17,10 @@ export interface ExactIdentifierHit {
   sourceName: string;
   sourceTier: number;
   isPrimary: boolean;
+  repository?: string;
+  revision?: string;
+  canonicalUrl?: string;
+  revisionUrl?: string;
   apiPackage?: string;
   apiVersion?: string;
   minecraftVersion?: string;
@@ -38,6 +42,10 @@ interface ExactIdentifierRow {
   source_name: string;
   source_tier: number;
   is_primary: number;
+  repository: string | null;
+  revision: string | null;
+  canonical_url: string | null;
+  revision_url: string | null;
   api_package: string | null;
   api_version: string | null;
   minecraft_version: string | null;
@@ -75,6 +83,10 @@ export function exactIdentifierSearch(
       s.name AS source_name,
       s.tier AS source_tier,
       i.is_primary,
+      d.repository,
+      d.revision,
+      d.canonical_url,
+      d.revision_url,
       d.api_package,
       d.api_version,
       d.minecraft_version
@@ -119,6 +131,10 @@ export function exactIdentifierSearch(
     sourceName: row.source_name,
     sourceTier: row.source_tier,
     isPrimary: row.is_primary === 1,
+    ...(row.repository ? { repository: row.repository } : {}),
+    ...(row.revision ? { revision: row.revision } : {}),
+    ...(row.canonical_url ? { canonicalUrl: row.canonical_url } : {}),
+    ...(row.revision_url ? { revisionUrl: row.revision_url } : {}),
     ...(row.api_package ? { apiPackage: row.api_package } : {}),
     ...(row.api_version ? { apiVersion: row.api_version } : {}),
     ...(row.minecraft_version ? { minecraftVersion: row.minecraft_version } : {}),
