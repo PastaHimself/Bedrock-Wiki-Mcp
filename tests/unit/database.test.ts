@@ -46,6 +46,13 @@ describe("SQLite index", () => {
     expect(fts?.name).toBe("chunks_fts");
   });
 
+  it("honors the configured SQLite busy timeout", () => {
+    const db = openDatabase(":memory:", { timeoutMs: 1234 });
+    databases.push(db);
+    const row = db.prepare("PRAGMA busy_timeout").get() as { timeout: number } | undefined;
+    expect(row?.timeout).toBe(1234);
+  });
+
   it("persists documents for exact identifier and lexical retrieval", () => {
     const db = database();
     const repository = new IndexRepository(db);
@@ -75,6 +82,8 @@ describe("SQLite index", () => {
     expect(validation.ok).toBe(true);
     expect(validation.documents).toBe(1);
     expect(validation.chunks).toBe(validation.ftsRows);
+    expect(validation.missingFtsRows).toBe(0);
+    expect(validation.orphanFtsRows).toBe(0);
   });
 
   it("replaces a document without leaving stale identifiers or FTS rows", () => {
@@ -115,6 +124,30 @@ describe("SQLite index", () => {
     expect(report.ftsRows).toBe(0);
   });
 
+  it("detects missing and orphan FTS rows even when row counts match", () => {
+    const db = database();
+    const repository = new IndexRepository(db);
+    repository.replaceDocument(ingestDocument({
+      source: stableSource,
+      path: "docs/test.md",
+      content: "# Health\nMinecraft health documentation.",
+    }));
+
+    const chunk = db.prepare("SELECT id FROM chunks LIMIT 1").get() as { id: number } | undefined;
+    expect(chunk).toBeDefined();
+    db.prepare("DELETE FROM chunks_fts WHERE rowid = ?").run(chunk?.id ?? -1);
+    db.prepare(`
+      INSERT INTO chunks_fts(rowid, identifier_text, title, heading, aliases, body, path)
+      VALUES (999999, '', 'orphan', '', '', 'orphan', 'orphan')
+    `).run();
+
+    const report = validateIndex(db);
+    expect(report.ftsRows).toBe(report.chunks);
+    expect(report.ok).toBe(false);
+    expect(report.missingFtsRows).toBe(1);
+    expect(report.orphanFtsRows).toBe(1);
+  });
+
   it("prefers a stable exact definition over an experimental preview equivalent", () => {
     const db = database();
     const repository = new IndexRepository(db);
@@ -134,6 +167,52 @@ describe("SQLite index", () => {
     expect(hits).toHaveLength(2);
     expect(hits[0]?.channel).toBe("stable");
     expect(hits[0]?.stability).toBe("stable");
+  });
+
+  it("does not let a preview primary identifier outrank a stable secondary exact match", () => {
+    const db = database();
+    const repository = new IndexRepository(db);
+
+    repository.replaceDocument(ingestDocument({
+      source: previewSource,
+      path: "creator/ScriptAPI/minecraft/server/SystemPreview.md",
+      content: "# System Class\n## Methods\n::: moniker range=\"=minecraft-bedrock-experimental\"\n### **runInterval**\n`runInterval(callback: () => void): number;`\n::: moniker-end",
+    }));
+    repository.replaceDocument(ingestDocument({
+      source: stableSource,
+      path: "creator/Documents/system-runinterval.md",
+      content: "# Scheduling work\nUse `System.runInterval` to schedule repeating work.",
+    }));
+
+    const hits = exactIdentifierSearch(db, "System.runInterval");
+    expect(hits).toHaveLength(2);
+    expect(hits[0]?.channel).toBe("stable");
+    expect(hits[0]?.isPrimary).toBe(false);
+    expect(hits[1]?.channel).toBe("preview");
+    expect(hits[1]?.isPrimary).toBe(true);
+  });
+
+  it("allows a caller-owned transaction to roll back a clear-and-replace sequence", () => {
+    const db = database();
+    const repository = new IndexRepository(db);
+    repository.replaceDocument(ingestDocument({
+      source: stableSource,
+      path: "behavior_pack/entities/example.json",
+      content: JSON.stringify({ "minecraft:entity": { description: { identifier: "example:mob" }, components: { "minecraft:health": { value: 20 } } } }),
+    }));
+
+    db.exec("BEGIN IMMEDIATE");
+    repository.clearIndex();
+    repository.replaceDocument(ingestDocument({
+      source: stableSource,
+      path: "behavior_pack/entities/example.json",
+      content: JSON.stringify({ "minecraft:entity": { description: { identifier: "example:mob" }, components: { "minecraft:movement": { value: 0.2 } } } }),
+    }));
+    db.exec("ROLLBACK");
+
+    expect(exactIdentifierSearch(db, "minecraft:health")).toHaveLength(1);
+    expect(exactIdentifierSearch(db, "minecraft:movement")).toHaveLength(0);
+    expect(validateIndex(db).ok).toBe(true);
   });
 
   it("compiles raw queries as quoted FTS terms instead of executable FTS syntax", () => {
