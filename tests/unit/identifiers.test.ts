@@ -4,10 +4,20 @@ import { identifierSearchTerms, normalizeIdentifier } from "../../src/identifier
 
 describe("identifier extraction", () => {
   it("preserves exact Bedrock identifiers and dotted API access", () => {
-    const identifiers = extractIdentifiers("Use minecraft:health with world.afterEvents.playerSpawn and system.runInterval.");
+    const identifiers = extractIdentifiers("Use minecraft:health. with world.afterEvents.playerSpawn and system.runInterval.");
     expect(identifiers).toContain("minecraft:health");
     expect(identifiers).toContain("world.afterEvents.playerSpawn");
     expect(identifiers).toContain("system.runInterval");
+    expect(identifiers).not.toContain("minecraft:health.");
+  });
+
+  it("captures distinctive API type names without treating generic prose as identifiers", () => {
+    const identifiers = extractIdentifiers("Use This Documentation with PlayerBreakBlockAfterEvent and `World`.");
+    expect(identifiers).toContain("PlayerBreakBlockAfterEvent");
+    expect(identifiers).toContain("World");
+    expect(identifiers).not.toContain("Use");
+    expect(identifiers).not.toContain("This");
+    expect(identifiers).not.toContain("Documentation");
   });
 
   it("extracts identifiers from JSON keys", () => {
