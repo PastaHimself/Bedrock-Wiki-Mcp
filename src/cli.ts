@@ -1,9 +1,11 @@
 import { join, resolve } from "node:path";
+import type { DatabaseSync } from "node:sqlite";
 import { loadRuntimeConfig } from "./config.js";
 import { MCP_PATH, SERVICE_NAME, SERVICE_VERSION } from "./constants.js";
 import { openDatabase } from "./db/connection.js";
 import { rebuildLocalIndex } from "./db/indexer.js";
-import { migrateDatabase } from "./db/migrate.js";
+import { getSchemaVersion, migrateDatabase } from "./db/migrate.js";
+import { SCHEMA_VERSION } from "./db/migrations/0001-initial.js";
 import { validateIndex } from "./db/validate.js";
 import type { SourceDescriptor } from "./models/source.js";
 import { close, createHttpServer, listen } from "./server.js";
@@ -11,7 +13,7 @@ import { close, createHttpServer, listen } from "./server.js";
 const HELP = `Bedrock Wiki MCP ${SERVICE_VERSION}
 
 Usage:
-  bedrock-mcp serve                       Start the HTTP MCP server
+  bedrock-mcp serve                       Start the HTTP MCP server using the existing read-only index
   bedrock-mcp rebuild-index [directory]   Rebuild the local knowledge index
   bedrock-mcp validate-index              Validate SQLite/index integrity
   bedrock-mcp version                     Print the version
@@ -64,10 +66,33 @@ function validateIndexCommand(): number {
   }
 }
 
+function openServingDatabase(path: string): DatabaseSync {
+  let database: DatabaseSync;
+  try {
+    database = openDatabase(path, { mode: "readonly" });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`Knowledge index is unavailable at ${path}. Build the index before serving. ${detail}`);
+  }
+
+  const schemaVersion = getSchemaVersion(database);
+  if (schemaVersion !== SCHEMA_VERSION) {
+    database.close();
+    throw new Error(`Knowledge index schema ${schemaVersion} is incompatible with server schema ${SCHEMA_VERSION}. Rebuild or migrate the index before serving.`);
+  }
+  return database;
+}
+
 async function serve(): Promise<number> {
   const config = loadRuntimeConfig();
-  const server = createHttpServer();
-  await listen(server, config);
+  const database = openServingDatabase(indexPath(config.dataDir));
+  const server = createHttpServer({ database });
+  try {
+    await listen(server, config);
+  } catch (error) {
+    database.close();
+    throw error;
+  }
 
   process.stdout.write(
     `${SERVICE_NAME} listening on http://${config.host}:${config.port}${MCP_PATH}\n`,
@@ -78,7 +103,11 @@ async function serve(): Promise<number> {
     if (stopping) return;
     stopping = true;
     process.stdout.write(`Received ${signal}; shutting down.\n`);
-    await close(server);
+    try {
+      await close(server);
+    } finally {
+      database.close();
+    }
   };
 
   process.once("SIGTERM", () => {
