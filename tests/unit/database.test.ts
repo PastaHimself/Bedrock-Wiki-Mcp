@@ -215,6 +215,12 @@ describe("SQLite index", () => {
     expect(validateIndex(db).ok).toBe(true);
   });
 
+  it("rejects search result limits outside bounded ranges", () => {
+    const db = database();
+    expect(() => exactIdentifierSearch(db, "minecraft:health", 0)).toThrow("between 1 and 50");
+    expect(() => lexicalSearch(db, "health", 101)).toThrow("between 1 and 100");
+  });
+
   it("compiles raw queries as quoted FTS terms instead of executable FTS syntax", () => {
     expect(compileFtsQuery('health OR "something"*')).toBe('"health" AND "OR" AND "something"');
     expect(() => compileFtsQuery("***")).toThrow("searchable text");
