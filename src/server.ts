@@ -1,12 +1,14 @@
 import { createServer, type Server, type ServerResponse } from "node:http";
+import type { DatabaseSync } from "node:sqlite";
 import { toNodeHandler, type NodeIncomingMessageLike } from "@modelcontextprotocol/node";
 import { createMcpHandler } from "@modelcontextprotocol/server";
 import type { AppConfig } from "./config.js";
 import { HEALTH_PATH, MCP_PATH, SERVICE_NAME, SERVICE_VERSION } from "./constants.js";
 import { createBedrockMcpServer } from "./mcp.js";
 
-const mcpHandler = createMcpHandler(() => createBedrockMcpServer());
-const nodeMcpHandler = toNodeHandler(mcpHandler);
+export interface HttpServerOptions {
+  database?: DatabaseSync;
+}
 
 function writeJson(response: ServerResponse, statusCode: number, body: unknown): void {
   response.statusCode = statusCode;
@@ -14,7 +16,10 @@ function writeJson(response: ServerResponse, statusCode: number, body: unknown):
   response.end(JSON.stringify(body));
 }
 
-export function createHttpServer(): Server {
+export function createHttpServer(options: HttpServerOptions = {}): Server {
+  const mcpHandler = createMcpHandler(() => createBedrockMcpServer(options.database));
+  const nodeMcpHandler = toNodeHandler(mcpHandler);
+
   return createServer(async (request, response) => {
     const url = new URL(request.url ?? "/", "http://localhost");
 
