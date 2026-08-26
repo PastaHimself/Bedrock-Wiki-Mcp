@@ -10,6 +10,8 @@ const STOP_WORDS = new Set([
   "a", "an", "and", "are", "as", "at", "be", "by", "do", "does", "for", "from",
   "how", "i", "in", "is", "it", "make", "of", "on", "the", "to", "use", "when", "with",
 ]);
+const MAX_MERGED_RAW_CHARS = 3_200;
+const MIN_NEIGHBOR_SCORE = 12;
 
 export interface KnowledgeSearchOptions {
   query: string;
@@ -41,6 +43,7 @@ export interface KnowledgeSearchResult {
   sourceTier: number;
   score: number;
   exactMatch: boolean;
+  mergedChunkIds?: string[];
   repository?: string;
   revision?: string;
   canonicalUrl?: string;
@@ -57,7 +60,11 @@ export interface KnowledgeSearchResponse {
   totalChars: number;
 }
 
-type Candidate = KnowledgeSearchResult & { rawContent: string };
+type Candidate = KnowledgeSearchResult & {
+  rawContent: string;
+  ordinal: number;
+  mergedChunkIds: string[];
+};
 
 function validateOptions(options: KnowledgeSearchOptions): { limit: number; maxChars: number } {
   const limit = options.limit ?? 5;
@@ -86,10 +93,12 @@ function fromExact(hit: ExactIdentifierHit, rank: number): Candidate {
   const candidate: Candidate = {
     chunkId: hit.chunkId,
     documentId: hit.documentId,
-    title: hit.title,
+    ordinal: hit.ordinal,
     identifier: hit.identifier,
     excerpt: "",
     rawContent: hit.content,
+    mergedChunkIds: [],
+    title: hit.title,
     path: hit.path,
     kind: hit.kind,
     category: hit.category,
@@ -117,10 +126,12 @@ function fromLexical(hit: LexicalSearchHit, rank: number): Candidate {
   const candidate: Candidate = {
     chunkId: hit.chunkId,
     documentId: hit.documentId,
-    title: hit.title,
+    ordinal: hit.ordinal,
     ...(hit.identifier ? { identifier: hit.identifier } : {}),
     excerpt: "",
     rawContent: hit.content,
+    mergedChunkIds: [],
+    title: hit.title,
     path: hit.path,
     kind: hit.kind,
     category: hit.category,
@@ -198,6 +209,63 @@ function excerptFor(content: string, query: string, maxLength = 1_600): string {
   return `${prefix}${content.slice(start, end).trim()}${suffix}`;
 }
 
+function mergeAdjacentCandidates(candidates: Candidate[]): Candidate[] {
+  const byDocumentOrdinal = new Map<string, Map<number, Candidate>>();
+  for (const candidate of candidates) {
+    let byOrdinal = byDocumentOrdinal.get(candidate.documentId);
+    if (!byOrdinal) {
+      byOrdinal = new Map<number, Candidate>();
+      byDocumentOrdinal.set(candidate.documentId, byOrdinal);
+    }
+    byOrdinal.set(candidate.ordinal, candidate);
+  }
+
+  const consumed = new Set<string>();
+  const merged: Candidate[] = [];
+
+  for (const candidate of candidates) {
+    if (consumed.has(candidate.chunkId)) continue;
+
+    const byOrdinal = byDocumentOrdinal.get(candidate.documentId);
+    const neighbors = [-1, 1]
+      .map((offset) => byOrdinal?.get(candidate.ordinal + offset))
+      .filter((neighbor): neighbor is Candidate => Boolean(neighbor))
+      .filter((neighbor) => !consumed.has(neighbor.chunkId))
+      .filter((neighbor) => neighbor.score >= MIN_NEIGHBOR_SCORE || candidate.exactMatch || neighbor.exactMatch);
+
+    const selected: Candidate[] = [candidate];
+    let rawChars = candidate.rawContent.length;
+    for (const neighbor of neighbors.sort((a, b) => b.score - a.score)) {
+      const projected = rawChars + 2 + neighbor.rawContent.length;
+      if (projected > MAX_MERGED_RAW_CHARS) continue;
+      selected.push(neighbor);
+      rawChars = projected;
+    }
+
+    if (selected.length === 1) {
+      merged.push(candidate);
+      consumed.add(candidate.chunkId);
+      continue;
+    }
+
+    selected.sort((a, b) => a.ordinal - b.ordinal);
+    const neighborIds = selected.filter((item) => item.chunkId !== candidate.chunkId).map((item) => item.chunkId);
+    const neighborScore = selected
+      .filter((item) => item.chunkId !== candidate.chunkId)
+      .reduce((sum, item) => sum + item.score, 0);
+
+    merged.push({
+      ...candidate,
+      rawContent: selected.map((item) => item.rawContent).join("\n\n"),
+      mergedChunkIds: neighborIds,
+      score: candidate.score + neighborScore * 0.1,
+    });
+    for (const item of selected) consumed.add(item.chunkId);
+  }
+
+  return merged;
+}
+
 function publicResult(candidate: Candidate, excerpt: string): KnowledgeSearchResult {
   return {
     chunkId: candidate.chunkId,
@@ -216,6 +284,7 @@ function publicResult(candidate: Candidate, excerpt: string): KnowledgeSearchRes
     sourceTier: candidate.sourceTier,
     score: Number(candidate.score.toFixed(3)),
     exactMatch: candidate.exactMatch,
+    ...(candidate.mergedChunkIds.length > 0 ? { mergedChunkIds: candidate.mergedChunkIds } : {}),
     ...(candidate.repository ? { repository: candidate.repository } : {}),
     ...(candidate.revision ? { revision: candidate.revision } : {}),
     ...(candidate.canonicalUrl ? { canonicalUrl: candidate.canonicalUrl } : {}),
@@ -265,13 +334,14 @@ export function searchKnowledge(database: DatabaseSync, options: KnowledgeSearch
       return candidate;
     })
     .sort((a, b) => b.score - a.score || a.sourceTier - b.sourceTier || a.chunkId.localeCompare(b.chunkId));
+  const ranked = mergeAdjacentCandidates(filtered);
 
   const perDocument = new Map<string, number>();
   const results: KnowledgeSearchResult[] = [];
   let totalChars = 0;
   let truncated = false;
 
-  for (const candidate of filtered) {
+  for (const candidate of ranked) {
     if (results.length >= validated.limit) {
       truncated = true;
       break;
@@ -284,12 +354,13 @@ export function searchKnowledge(database: DatabaseSync, options: KnowledgeSearch
       truncated = true;
       break;
     }
-    const excerpt = excerptFor(candidate.rawContent, query, Math.min(1_600, remaining));
+    const perResultLimit = candidate.mergedChunkIds.length > 0 ? 2_400 : 1_600;
+    const excerpt = excerptFor(candidate.rawContent, query, Math.min(perResultLimit, remaining));
     results.push(publicResult(candidate, excerpt));
     totalChars += excerpt.length;
     perDocument.set(candidate.documentId, usedFromDocument + 1);
   }
 
-  if (filtered.length > results.length) truncated = true;
+  if (ranked.length > results.length) truncated = true;
   return { query, results, truncated, totalChars };
 }
