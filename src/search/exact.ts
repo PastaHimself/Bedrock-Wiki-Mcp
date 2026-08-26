@@ -84,7 +84,6 @@ export function exactIdentifierSearch(
     JOIN sources s ON s.id = d.source_id
     WHERE i.normalized = ?
     ORDER BY
-      i.is_primary DESC,
       CASE c.lifecycle
         WHEN 'active' THEN 0
         WHEN 'deprecated' THEN 1
@@ -99,6 +98,7 @@ export function exactIdentifierSearch(
       END,
       CASE d.channel WHEN 'stable' THEN 0 WHEN 'preview' THEN 1 ELSE 2 END,
       s.tier ASC,
+      i.is_primary DESC,
       c.ordinal ASC
     LIMIT ?
   `).all(normalized, validateLimit(limit)) as unknown as ExactIdentifierRow[];
