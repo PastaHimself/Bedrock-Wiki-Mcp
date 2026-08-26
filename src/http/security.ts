@@ -2,6 +2,9 @@ import { timingSafeEqual } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import type { AppConfig } from "../config.js";
 
+const RATE_WINDOW_MS = 60_000;
+const MAX_TRACKED_CLIENTS = 4_096;
+
 export interface GuardRejection {
   statusCode: number;
   error: string;
@@ -44,6 +47,18 @@ export class HttpRequestGuard {
     this.#config = config;
   }
 
+  #pruneRateWindows(now: number): void {
+    if (this.#rateWindows.size < MAX_TRACKED_CLIENTS) return;
+    for (const [key, window] of this.#rateWindows) {
+      if (now - window.startedAt >= RATE_WINDOW_MS) this.#rateWindows.delete(key);
+    }
+    while (this.#rateWindows.size >= MAX_TRACKED_CLIENTS) {
+      const oldestKey = this.#rateWindows.keys().next().value as string | undefined;
+      if (oldestKey === undefined) break;
+      this.#rateWindows.delete(oldestKey);
+    }
+  }
+
   enter(request: IncomingMessage): GuardRejection | GuardPermit {
     if (!hostAllowed(request.headers.host, this.#config.allowedHosts)) {
       return { statusCode: 403, error: "host_not_allowed" };
@@ -54,24 +69,25 @@ export class HttpRequestGuard {
       return { statusCode: 403, error: "origin_not_allowed" };
     }
 
-    if (this.#config.bearerToken) {
-      const authorization = typeof request.headers.authorization === "string" ? request.headers.authorization : undefined;
-      if (!bearerMatches(authorization, this.#config.bearerToken)) {
-        return { statusCode: 401, error: "unauthorized" };
-      }
-    }
-
     const now = Date.now();
     const clientKey = request.socket.remoteAddress ?? "unknown";
     let window = this.#rateWindows.get(clientKey);
-    if (!window || now - window.startedAt >= 60_000) {
+    if (!window || now - window.startedAt >= RATE_WINDOW_MS) {
+      this.#pruneRateWindows(now);
       window = { startedAt: now, count: 0 };
       this.#rateWindows.set(clientKey, window);
     }
     window.count += 1;
     if (window.count > this.#config.rateLimitPerMinute) {
-      const retryAfterSeconds = Math.max(1, Math.ceil((60_000 - (now - window.startedAt)) / 1000));
+      const retryAfterSeconds = Math.max(1, Math.ceil((RATE_WINDOW_MS - (now - window.startedAt)) / 1000));
       return { statusCode: 429, error: "rate_limited", retryAfterSeconds };
+    }
+
+    if (this.#config.bearerToken) {
+      const authorization = typeof request.headers.authorization === "string" ? request.headers.authorization : undefined;
+      if (!bearerMatches(authorization, this.#config.bearerToken)) {
+        return { statusCode: 401, error: "unauthorized" };
+      }
     }
 
     if (this.#activeRequests >= this.#config.maxConcurrentRequests) {
