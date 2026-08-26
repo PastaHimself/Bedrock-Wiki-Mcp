@@ -9,5 +9,6 @@ export interface SourceDescriptor {
   channel: ReleaseChannel;
   repository?: string;
   branch?: string;
+  revision?: string;
   baseUrl?: string;
 }
