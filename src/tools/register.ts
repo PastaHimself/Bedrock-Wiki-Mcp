@@ -43,6 +43,7 @@ const searchResultSchema = z.object({
   sourceTier: z.number().int(),
   score: z.number(),
   exactMatch: z.boolean(),
+  mergedChunkIds: z.array(z.string()).max(2).optional(),
   ...provenanceShape,
 });
 
