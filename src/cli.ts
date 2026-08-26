@@ -35,7 +35,7 @@ export async function runCli(args: readonly string[] = process.argv.slice(2)): P
   }
 
   const config = loadRuntimeConfig();
-  const server = createHttpServer(config);
+  const server = createHttpServer();
   await listen(server, config);
 
   process.stdout.write(

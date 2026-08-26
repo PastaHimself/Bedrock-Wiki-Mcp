@@ -1,4 +1,4 @@
-import { createServer, type Server, type ServerResponse } from "node:http";
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { toNodeHandler } from "@modelcontextprotocol/node";
 import { createMcpHandler } from "@modelcontextprotocol/server";
 import type { AppConfig } from "./config.js";
@@ -14,7 +14,7 @@ function writeJson(response: ServerResponse, statusCode: number, body: unknown):
   response.end(JSON.stringify(body));
 }
 
-export function createHttpServer(config: AppConfig): Server {
+export function createHttpServer(): Server {
   return createServer(async (request, response) => {
     const url = new URL(request.url ?? "/", "http://localhost");
 
@@ -28,8 +28,16 @@ export function createHttpServer(config: AppConfig): Server {
     }
 
     if (url.pathname === MCP_PATH) {
+      if (!request.method) {
+        writeJson(response, 400, { error: "missing_http_method" });
+        return;
+      }
+
       try {
-        await nodeMcpHandler(request, response);
+        // The MCP Node adapter targets IncomingMessage at runtime, but its structural
+        // type requires `method` to be non-optional. The guard above establishes it.
+        const mcpRequest = request as IncomingMessage & { method: string };
+        await nodeMcpHandler(mcpRequest, response);
       } catch (error) {
         console.error("MCP request failed", error);
         if (!response.headersSent) {

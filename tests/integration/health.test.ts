@@ -18,7 +18,7 @@ describe("HTTP server", () => {
       dataDir: "/tmp/bedrock-mcp-test",
       logLevel: "error",
     };
-    const server = createHttpServer(config);
+    const server = createHttpServer();
     openServers.push(server);
     await listen(server, config);
 
