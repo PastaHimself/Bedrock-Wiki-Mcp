@@ -12,11 +12,18 @@ export interface DocumentMetadata {
   channel: ReleaseChannel;
   stability: Stability;
   lifecycle: Lifecycle;
+  contentHash: string;
   description?: string;
+  repository?: string;
+  branch?: string;
+  revision?: string;
+  sourceFileHash?: string;
   apiPackage?: string;
   apiVersion?: string;
   minecraftVersion?: string;
   canonicalUrl?: string;
+  revisionUrl?: string;
+  sourceModifiedAt?: string;
 }
 
 export interface ParsedDocument {
