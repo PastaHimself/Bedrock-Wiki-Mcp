@@ -103,8 +103,7 @@ export function parseBedrockJson(input: string, path: string): JsonParseResult {
       for (const [key, value] of Object.entries(group)) {
         const pointer = `/minecraft:entity/${escapePointer(groupName)}/${escapePointer(key)}`;
         const wrapper = { "minecraft:entity": { ...baseDescription, [groupName]: { [key]: value } } };
-        const identifiers = key.startsWith("minecraft:") ? [key, entityId] : [entityId, key];
-        pushChunk(chunks, `${entityId} — ${key}`, pointer, value, identifiers, kind === "component" ? "component" : "event", wrapper);
+        pushChunk(chunks, `${entityId} — ${key}`, pointer, value, [key, entityId], kind === "component" ? "component" : "event", wrapper);
       }
     }
   }
