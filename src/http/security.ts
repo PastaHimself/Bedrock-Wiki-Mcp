@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import type { IncomingMessage } from "node:http";
+import { isIP } from "node:net";
 import type { AppConfig } from "../config.js";
 
 const RATE_WINDOW_MS = 60_000;
@@ -38,8 +39,18 @@ function bearerMatches(header: string | undefined, token: string): boolean {
   return provided.length === expected.length && timingSafeEqual(provided, expected);
 }
 
+function clientRateKey(request: IncomingMessage, trustedProxyIps: readonly string[]): string {
+  const peer = request.socket.remoteAddress ?? "unknown";
+  if (!trustedProxyIps.includes(peer)) return peer;
+
+  const forwarded = request.headers["cf-connecting-ip"];
+  if (typeof forwarded !== "string") return peer;
+  const clientIp = forwarded.trim();
+  return isIP(clientIp) !== 0 ? clientIp : peer;
+}
+
 export class HttpRequestGuard {
-  readonly #config: Pick<AppConfig, "allowedHosts" | "allowedOrigins" | "bearerToken" | "maxConcurrentRequests" | "rateLimitPerMinute">;
+  readonly #config: Pick<AppConfig, "allowedHosts" | "allowedOrigins" | "trustedProxyIps" | "bearerToken" | "maxConcurrentRequests" | "rateLimitPerMinute">;
   readonly #rateWindows = new Map<string, WindowCounter>();
   #activeRequests = 0;
 
@@ -70,7 +81,7 @@ export class HttpRequestGuard {
     }
 
     const now = Date.now();
-    const clientKey = request.socket.remoteAddress ?? "unknown";
+    const clientKey = clientRateKey(request, this.#config.trustedProxyIps);
     let window = this.#rateWindows.get(clientKey);
     if (!window || now - window.startedAt >= RATE_WINDOW_MS) {
       this.#pruneRateWindows(now);

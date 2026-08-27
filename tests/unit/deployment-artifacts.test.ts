@@ -44,6 +44,7 @@ describe("production deployment artifacts", () => {
     expect(unit).toContain("ReadWritePaths=/var/lib/bedrock-mcp");
 
     const environment = await text("deploy/systemd/bedrock-mcp.env.example");
+    expect(environment).toContain("BEDROCK_MCP_TRUSTED_PROXY_IPS=");
     expect(environment).toContain("BEDROCK_MCP_MAX_CONCURRENT_REQUESTS=8");
     expect(environment).toContain("BEDROCK_MCP_SEMANTIC_ENABLED=false");
     expect(environment).toContain("BEDROCK_MCP_SEMANTIC_MODEL=onnx-community/all-MiniLM-L6-v2-ONNX");
@@ -56,6 +57,16 @@ describe("production deployment artifacts", () => {
     expect(sourceSync).toContain("--filter=blob:none");
     expect(sourceSync).toContain("--single-branch");
     expect(sourceSync).not.toContain("sparse-checkout");
+  });
+
+  it("documents Cloudflare Tunnel client-IP trust without enabling generic proxy trust", async () => {
+    const environment = await text("deploy/systemd/bedrock-mcp.env.example");
+    expect(environment).toContain("BEDROCK_MCP_TRUSTED_PROXY_IPS=\n");
+
+    const vps = await text("deploy/VPS.md");
+    expect(vps).toContain("BEDROCK_MCP_TRUSTED_PROXY_IPS=127.0.0.1");
+    expect(vps).toContain("CF-Connecting-IP");
+    expect(vps).toContain("Leave the setting empty unless the listed peer is the trusted Cloudflare Tunnel process");
   });
 
   it("uses a persistent but jittered systemd timer", async () => {

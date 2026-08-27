@@ -13,6 +13,7 @@ describe("loadConfig", () => {
       logLevel: "info",
       allowedHosts: [],
       allowedOrigins: [],
+      trustedProxyIps: [],
       maxRequestBodySize: 524288,
       maxConcurrentRequests: 32,
       rateLimitPerMinute: 120,
@@ -32,6 +33,7 @@ describe("loadConfig", () => {
         BEDROCK_MCP_LOG_LEVEL: "warn",
         BEDROCK_MCP_ALLOWED_HOSTS: "bedrock-mcp.example.com, BEDROCK-MCP.EXAMPLE.COM:8443",
         BEDROCK_MCP_ALLOWED_ORIGINS: "https://chatgpt.com/, https://example.com",
+        BEDROCK_MCP_TRUSTED_PROXY_IPS: "127.0.0.1, ::1,127.0.0.1",
         BEDROCK_MCP_BEARER_TOKEN: "0123456789abcdef",
         BEDROCK_MCP_MAX_REQUEST_BYTES: "262144",
         BEDROCK_MCP_MAX_CONCURRENT_REQUESTS: "12",
@@ -51,6 +53,7 @@ describe("loadConfig", () => {
       logLevel: "warn",
       allowedHosts: ["bedrock-mcp.example.com", "bedrock-mcp.example.com:8443"],
       allowedOrigins: ["https://chatgpt.com", "https://example.com"],
+      trustedProxyIps: ["127.0.0.1", "::1"],
       bearerToken: "0123456789abcdef",
       maxRequestBodySize: 262144,
       maxConcurrentRequests: 12,
@@ -69,6 +72,7 @@ describe("loadConfig", () => {
     expect(() => loadConfig({ BEDROCK_MCP_BEARER_TOKEN: "too-short" })).toThrow();
     expect(() => loadConfig({ BEDROCK_MCP_MAX_REQUEST_BYTES: "100" })).toThrow();
     expect(() => loadConfig({ BEDROCK_MCP_MAX_CONCURRENT_REQUESTS: "0" })).toThrow();
+    expect(() => loadConfig({ BEDROCK_MCP_TRUSTED_PROXY_IPS: "127.0.0.1,not-an-ip" })).toThrow();
     expect(() => loadConfig({ BEDROCK_MCP_SEMANTIC_ENABLED: "yes" })).toThrow();
     expect(() => loadConfig({ BEDROCK_MCP_SEMANTIC_TOP_K: "101" })).toThrow();
   });

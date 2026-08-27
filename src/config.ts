@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { isIP } from "node:net";
 import { resolve } from "node:path";
 import { loadEnvFile } from "node:process";
 import { z } from "zod/v4";
@@ -13,6 +14,7 @@ const environmentSchema = z.object({
   BEDROCK_MCP_LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
   BEDROCK_MCP_ALLOWED_HOSTS: z.string().default(""),
   BEDROCK_MCP_ALLOWED_ORIGINS: z.string().default(""),
+  BEDROCK_MCP_TRUSTED_PROXY_IPS: z.string().default(""),
   BEDROCK_MCP_BEARER_TOKEN: z.string().min(16).max(4096).optional(),
   BEDROCK_MCP_MAX_REQUEST_BYTES: z.coerce.number().int().min(16_384).max(4_194_304).default(524_288),
   BEDROCK_MCP_MAX_CONCURRENT_REQUESTS: z.coerce.number().int().min(1).max(512).default(32),
@@ -30,6 +32,7 @@ export interface AppConfig {
   readonly logLevel: "debug" | "info" | "warn" | "error";
   readonly allowedHosts: readonly string[];
   readonly allowedOrigins: readonly string[];
+  readonly trustedProxyIps: readonly string[];
   readonly bearerToken?: string;
   readonly maxRequestBodySize: number;
   readonly maxConcurrentRequests: number;
@@ -41,6 +44,13 @@ export interface AppConfig {
 
 function csvValues(value: string, normalize: (entry: string) => string = (entry) => entry): string[] {
   return [...new Set(value.split(",").map((entry) => normalize(entry.trim())).filter(Boolean))];
+}
+
+function trustedProxyIps(value: string): string[] {
+  const entries = csvValues(value);
+  const invalid = entries.find((entry) => isIP(entry) === 0);
+  if (invalid) throw new Error(`BEDROCK_MCP_TRUSTED_PROXY_IPS contains an invalid IP address: ${invalid}`);
+  return entries;
 }
 
 export function loadConfig(
@@ -57,6 +67,7 @@ export function loadConfig(
     logLevel: parsed.BEDROCK_MCP_LOG_LEVEL,
     allowedHosts: csvValues(parsed.BEDROCK_MCP_ALLOWED_HOSTS, (entry) => entry.toLocaleLowerCase()),
     allowedOrigins: csvValues(parsed.BEDROCK_MCP_ALLOWED_ORIGINS, (entry) => entry.replace(/\/$/, "")),
+    trustedProxyIps: trustedProxyIps(parsed.BEDROCK_MCP_TRUSTED_PROXY_IPS),
     ...(parsed.BEDROCK_MCP_BEARER_TOKEN ? { bearerToken: parsed.BEDROCK_MCP_BEARER_TOKEN } : {}),
     maxRequestBodySize: parsed.BEDROCK_MCP_MAX_REQUEST_BYTES,
     maxConcurrentRequests: parsed.BEDROCK_MCP_MAX_CONCURRENT_REQUESTS,

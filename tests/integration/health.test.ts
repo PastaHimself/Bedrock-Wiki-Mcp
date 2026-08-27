@@ -14,6 +14,7 @@ function testConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     logLevel: "error",
     allowedHosts: [],
     allowedOrigins: [],
+    trustedProxyIps: [],
     maxRequestBodySize: 524288,
     maxConcurrentRequests: 32,
     rateLimitPerMinute: 120,
