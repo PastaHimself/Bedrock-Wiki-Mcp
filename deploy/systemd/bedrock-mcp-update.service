@@ -1,0 +1,43 @@
+[Unit]
+Description=Refresh Bedrock Wiki MCP knowledge sources and index
+Documentation=https://github.com/PastaHimself/Bedrock-Wiki-Mcp
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/bedrock-wiki-mcp
+EnvironmentFile=/etc/bedrock-mcp/bedrock-mcp.env
+Environment=BEDROCK_MCP_APP_DIR=/opt/bedrock-wiki-mcp
+Environment=BEDROCK_MCP_UPDATE_LOCK=/var/lib/bedrock-mcp/update.lock
+
+# Run the network/index mutation as the unprivileged service account.
+ExecStart=/usr/sbin/runuser -u bedrock-mcp -- /usr/bin/bash /opt/bedrock-wiki-mcp/deploy/scripts/update-knowledge.sh
+
+# A running MCP process keeps its previous SQLite inode open across the atomic
+# index rename. Restart only after the entire refresh command succeeds.
+ExecStartPost=/usr/bin/systemctl try-restart bedrock-mcp.service
+
+TimeoutStartSec=30min
+UMask=0027
+
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+ReadWritePaths=/var/lib/bedrock-mcp
+
+[Install]
+WantedBy=multi-user.target
