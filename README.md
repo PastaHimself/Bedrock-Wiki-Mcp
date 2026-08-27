@@ -4,9 +4,9 @@ A self-hosted, read-only Model Context Protocol knowledge server for Minecraft B
 
 ## Status
 
-Milestones 0–6 are merged. Milestone 7 (safe administrative upstream source synchronization) is implemented on a feature branch pending final validation/merge.
+Milestones 0–7 are merged. Milestone 8 adds production deployment templates for Ubuntu/systemd, HTTPS ingress, scheduled source/index refreshes, IPv6-only VPS deployments, and Pterodactyl.
 
-The current server provides:
+The server currently provides:
 
 - Node.js 24 LTS + TypeScript
 - official Model Context Protocol TypeScript SDK v2
@@ -15,33 +15,29 @@ The current server provides:
 - SQLite + FTS5 persistence and lexical retrieval
 - Bedrock-aware Markdown, Script API, JSON, JavaScript, and TypeScript ingestion
 - exact identifier lookup plus natural-language FTS search
-- derived Script API runtime aliases such as `world.afterEvents.playerSpawn`
+- derived Script API aliases such as `world.afterEvents.playerSpawn`
 - stable/preview/historical metadata and ranking
 - Minecraft/API version-compatible filtering and ranking
 - controlled `doc_*` / `chk_*` fetching; no arbitrary filesystem reads
-- official Microsoft/Mojang source ingestion from verified local Git checkouts
-- explicit administrative source clone/fetch/fast-forward synchronization
-- no paid API, embedding API, or hosted vector database required
-
-Network synchronization remains an administrative process operation. Normal MCP serving is read-only and public MCP tools cannot clone, fetch, update, rebuild, or otherwise mutate source/index state.
+- verified Microsoft/Mojang Git source ingestion
+- safe administrative source clone/fetch/fast-forward synchronization
+- no paid API, embedding API, or hosted vector database required for normal operation
 
 ## Public MCP tools
 
 The v1 public surface intentionally stays small and read-only:
 
-- `search` — search documentation, API definitions, JSON, and code using exact + lexical retrieval; optional `minecraftVersion` and `apiVersion` constraints prefer exact provenance, allow compatible numeric prefixes, and retain unversioned material only as fallback evidence
-- `fetch` — fetch server-issued document/chunk IDs with bounded adjacent context
-- `get_definition` — look up an exact Bedrock identifier with stable-first, version-aware handling
-- `list_sources` — inspect indexed source provenance and trust tiers
-- `list_categories` — inspect categories currently present in the index
+- `search` — exact + lexical search across docs, Script API, JSON, and code
+- `fetch` — fetch server-issued document/chunk IDs with bounded context
+- `get_definition` — exact identifier lookup with stable-first, version-aware handling
+- `list_sources` — indexed source provenance and trust tiers
+- `list_categories` — categories currently present in the index
 
-The server does not expose arbitrary file reads, shell commands, database writes, source synchronization, or index-update operations as MCP tools.
+The public MCP server does **not** expose arbitrary file reads, shell commands, database writes, source synchronization, or index-update operations.
 
-## Bedrock identifier aliases
+## Retrieval behavior
 
-Generated Script API documentation often describes a runtime chain across multiple type files. For example, `World.afterEvents` has type `WorldAfterEvents`, while `playerSpawn` is documented on `WorldAfterEvents`.
-
-During index rebuilds the server derives those relationships and materializes exact aliases, so these runtime-style queries resolve to canonical documentation symbols:
+Generated Script API documentation often describes a runtime chain across multiple type files. During index rebuilds the server derives those relationships and materializes exact aliases, so runtime-style queries resolve to canonical documentation symbols:
 
 ```text
 world.afterEvents.playerSpawn
@@ -49,29 +45,20 @@ world.afterEvents.playerSpawn.subscribe
 system.runInterval
 ```
 
-Alias derivation is based on documented property signatures and canonical members, not a hand-maintained identifier list. Derived chains are depth-bounded and globally capped during a rebuild. Search and definition responses still return the canonical documented identifier rather than presenting a generated alias as the source symbol.
+Stable Microsoft/Mojang material has priority over preview, historical, or community material. Preview/historical content is excluded from normal retrieval unless explicitly requested or clearly implied by the query.
 
-## Design constraints
+Optional `minecraftVersion` and `apiVersion` constraints prefer exact provenance, allow compatible numeric prefixes, reject known mismatches, and retain unversioned material only as lower-ranked fallback evidence.
 
-- Public MCP functionality is read-only.
-- Stable Microsoft/Mojang documentation takes priority over preview, historical, or community material.
-- Preview and historical material are distinguishable in metadata and excluded from normal retrieval unless explicitly requested or clearly implied by the query.
-- Known version mismatches are excluded when a version constraint is supplied; exact matches outrank compatible prefixes, and evidence without version provenance remains a lower-ranked fallback.
-- Generated databases and source checkouts are deployment state and are not committed to Git.
-- Retrieval responses are bounded by result and character limits.
-- Official-source index rebuilds are performed into a temporary SQLite database and replace the live index only after validation succeeds.
-- Existing source checkouts are never reset or force-updated by synchronization; dirty, locally-ahead, or divergent checkouts fail closed.
+## Official sources
 
-## Configured official knowledge sources
+`config/sources.json` defines the official ingestion targets:
 
-`config/sources.json` describes the official ingestion targets:
+1. `MicrosoftDocs/minecraft-creator` — Creator docs, commands, references, current Script API, and prior Script API.
+2. `Mojang/bedrock-samples` `main` — stable behavior/resource pack samples.
+3. `Mojang/bedrock-samples` `preview` — preview samples, disabled by default.
+4. `microsoft/minecraft-samples` — official tutorials and projects.
 
-1. `MicrosoftDocs/minecraft-creator` — Creator documents, command reference, general reference, current Script API, and prior Script API material.
-2. `Mojang/bedrock-samples` `main` — official stable behavior/resource pack samples.
-3. `Mojang/bedrock-samples` `preview` — preview samples, disabled by default and kept distinct from stable material.
-4. `microsoft/minecraft-samples` — official tutorial and project samples.
-
-The source trust tier and release channel are preserved in the SQLite index and exposed through retrieval metadata.
+Source trust tier, release channel, repository, branch, revision, canonical URL, revision URL, and hashes are preserved as provenance where available.
 
 ## Development
 
@@ -79,23 +66,52 @@ Requirements:
 
 - Node.js 24.x
 - npm
-- Git available on `PATH` for `sync-sources`
+- Git on `PATH` for `sync-sources`
 
-Install reproducibly:
+Install and validate:
 
 ```bash
 npm ci
-```
-
-Run checks:
-
-```bash
 npm run check
 ```
 
-### Local curated knowledge
+Run the development server:
 
-Rebuild the local Tier-3 curated index:
+```bash
+npm run dev -- serve
+```
+
+Default local endpoints:
+
+```text
+http://127.0.0.1:8080/mcp
+http://127.0.0.1:8080/health
+```
+
+## Source synchronization and indexing
+
+Stable/default-enabled upstream sources:
+
+```bash
+npm run dev -- sync-sources
+npm run dev -- rebuild-sources
+npm run dev -- validate-index
+```
+
+Include preview sources explicitly:
+
+```bash
+npm run dev -- sync-sources --include-preview
+npm run dev -- rebuild-sources --include-preview
+```
+
+A custom checkout root can be supplied as the positional argument to both source commands.
+
+Synchronization is fail-closed: existing checkouts must have the configured origin and branch, a resolvable revision, and a clean worktree. Updates are fast-forward-only. Dirty, locally-ahead, divergent, detached, wrong-origin, wrong-branch, symlinked, or otherwise invalid checkouts are rejected rather than reset.
+
+`rebuild-sources` builds a separate SQLite database and only replaces the published index after validation succeeds.
+
+Local curated Tier-3 knowledge can be indexed separately:
 
 ```bash
 npm run dev -- rebuild-index
@@ -103,114 +119,42 @@ npm run dev -- rebuild-index
 npm run dev -- rebuild-index /path/to/knowledge
 ```
 
-### Official source synchronization
+## Production deployment
 
-By default, configured source checkouts live under:
+See [`deploy/README.md`](deploy/README.md) for the full production guide.
 
-```text
-data/sources/ms_creator_docs/
-data/sources/bedrock_samples_stable/
-data/sources/bedrock_samples_preview/
-data/sources/minecraft_samples/
-```
+Included templates cover:
 
-Synchronize the stable/default-enabled sources:
+- hardened Ubuntu `systemd` service
+- scheduled `sync-sources -> rebuild-sources -> validate-index` refreshes
+- post-refresh service restart so the process reopens the new SQLite inode
+- Caddy HTTPS reverse proxy
+- public IPv6/`AAAA` deployment
+- Cloudflare Tunnel for outbound-only ingress
+- production environment layout
+- backup/recovery considerations
+- Pterodactyl startup, persistence, and scheduled updates
 
-```bash
-npm run dev -- sync-sources
-```
-
-Use a different checkout root:
-
-```bash
-npm run dev -- sync-sources /srv/bedrock-sources
-```
-
-Include preview sources explicitly:
-
-```bash
-npm run dev -- sync-sources --include-preview
-```
-
-Missing sources are cloned into a temporary sibling directory, validated for configured origin/branch/revision, then renamed into place. Existing sources must already pass the same trust checks and have a clean worktree. Synchronization fetches the configured branch and updates only when the local commit is an ancestor of the fetched remote commit; locally-ahead, diverged, detached, wrong-origin, wrong-branch, dirty, symlinked, or otherwise invalid checkouts are rejected instead of being reset.
-
-Git commands run without an interactive credential prompt and with bounded execution time/output. The configured branch syntax is validated before it can be used as a Git argument.
-
-### Official source indexing
-
-After synchronization, rebuild the official-source index from the same checkout root:
-
-```bash
-npm run dev -- rebuild-sources
-```
-
-Or, for a custom checkout root:
-
-```bash
-npm run dev -- rebuild-sources /srv/bedrock-sources
-```
-
-Preview sources are also excluded from indexing by default. Include them explicitly when building a preview-aware index:
-
-```bash
-npm run dev -- rebuild-sources --include-preview
-```
-
-The rebuild streams documents instead of holding the whole corpus in RAM. Files outside the configured include/exclude rules, unsupported extensions, symlinks, and oversized files are skipped. Repository revision, branch, canonical file URL, revision-pinned URL, source file hash, and source modification time are preserved as provenance when available. Script API aliases are derived after all selected sources are indexed so cross-file type/member relationships are available.
-
-A typical administrative refresh is therefore:
-
-```bash
-npm run dev -- sync-sources
-npm run dev -- rebuild-sources
-npm run dev -- validate-index
-```
-
-Validate the SQLite/FTS index independently:
-
-```bash
-npm run dev -- validate-index
-```
-
-Start the development server:
-
-```bash
-npm run dev -- serve
-```
-
-The safe default bind is local-only:
-
-```text
-http://127.0.0.1:8080/mcp
-```
-
-Health check:
-
-```text
-GET http://127.0.0.1:8080/health
-```
+The recommended Ubuntu service keeps Node on `127.0.0.1` and exposes only HTTPS through the selected ingress layer. Database and administrative ports are never required.
 
 ## Remote HTTP security
 
-The MCP SDK handles the modern 2026 per-request HTTP protocol and retains a stateless legacy fallback for 2025-era clients. The application adds the security controls that the SDK deliberately leaves to the host application:
+The application adds host-level controls around the MCP SDK transport:
 
 - optional exact Host allowlist
 - optional exact Origin allowlist
 - optional bearer-token authentication
-- per-client fixed-window rate limiting
+- per-client rate limiting
 - concurrent `/mcp` request cap
-- MCP request-body size limit, enforced before MCP dispatch
-- HTTP header/request timeouts
+- bounded MCP request bodies
+- HTTP request/header timeouts
 - `X-Content-Type-Options: nosniff`
-- application-generated JSON responses use `Cache-Control: no-store`; successful MCP responses use the pinned SDK's `Cache-Control: no-cache, no-transform`
 
-`/health` intentionally remains unauthenticated and exposes only service status/name/version.
+`/health` intentionally remains unauthenticated and exposes only basic service status/name/version.
 
-For local development, Host/Origin allowlists and bearer authentication are disabled unless configured. For a public deployment, set `BEDROCK_MCP_ALLOWED_HOSTS` to the public MCP hostname and enable authentication if the client supports it. See [`.env.example`](.env.example) for all settings.
+For public deployments, set `BEDROCK_MCP_ALLOWED_HOSTS` to the public MCP hostname and enable bearer authentication when the client supports it. See [`.env.example`](.env.example) and [`deploy/systemd/bedrock-mcp.env.example`](deploy/systemd/bedrock-mcp.env.example).
 
-TLS should terminate at a reverse proxy or tunnel; the Node process should normally remain on a private/local bind and should not expose SQLite or administrative ports.
-
-## Current CLI
+## CLI
 
 ```text
 bedrock-mcp serve
@@ -222,20 +166,19 @@ bedrock-mcp version
 bedrock-mcp help
 ```
 
-Synchronization and index/source update commands are administrative process operations and are not public MCP tools.
+Synchronization and indexing commands are administrative process operations, not public MCP tools.
 
 ## Repository data policy
 
-The following are generated locally/deployed and ignored by Git:
+Generated deployment state is ignored by Git:
 
-- SQLite indexes
-- SQLite WAL/SHM files
+- SQLite indexes and WAL/SHM files
 - cloned upstream knowledge sources
 - temporary ingestion files
 - backups
 - logs
 
-`knowledge/local/` is reserved for deliberately curated local source material.
+`knowledge/local/` is reserved for deliberately curated local material.
 
 ## License
 
