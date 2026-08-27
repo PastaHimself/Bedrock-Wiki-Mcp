@@ -27,6 +27,9 @@ describe("production deployment artifacts", () => {
     expect(script).toContain("flock -n");
     expect(script).toContain("BEDROCK_MCP_SEMANTIC_ENABLED");
     expect(script).toContain("BEDROCK_MCP_BACKUP_RETAIN");
+    expect(script).toContain("BEDROCK_MCP_MIN_FREE_BYTES");
+    expect(script).toContain("df -B1 --output=avail");
+    expect(script).toContain("require_free_space \"before lexical rebuild\"");
     expect(backup).toBeGreaterThan(0);
     expect(sync).toBeGreaterThan(backup);
     expect(rebuild).toBeGreaterThan(sync);
@@ -41,9 +44,18 @@ describe("production deployment artifacts", () => {
     expect(unit).toContain("ReadWritePaths=/var/lib/bedrock-mcp");
 
     const environment = await text("deploy/systemd/bedrock-mcp.env.example");
+    expect(environment).toContain("BEDROCK_MCP_MAX_CONCURRENT_REQUESTS=8");
     expect(environment).toContain("BEDROCK_MCP_SEMANTIC_ENABLED=false");
     expect(environment).toContain("BEDROCK_MCP_SEMANTIC_MODEL=onnx-community/all-MiniLM-L6-v2-ONNX");
-    expect(environment).toContain("BEDROCK_MCP_BACKUP_RETAIN=7");
+    expect(environment).toContain("BEDROCK_MCP_BACKUP_RETAIN=3");
+    expect(environment).toContain("BEDROCK_MCP_MIN_FREE_BYTES=2147483648");
+  });
+
+  it("uses blobless partial clones without narrowing source coverage", async () => {
+    const sourceSync = await text("src/sources/sync.ts");
+    expect(sourceSync).toContain("--filter=blob:none");
+    expect(sourceSync).toContain("--single-branch");
+    expect(sourceSync).not.toContain("sparse-checkout");
   });
 
   it("uses a persistent but jittered systemd timer", async () => {
