@@ -129,7 +129,17 @@ async function cloneSource(
 
   try {
     await runGit(
-      ["clone", "--single-branch", "--no-tags", "--branch", config.branch, "--", config.repository, temporary],
+      [
+        "clone",
+        "--filter=blob:none",
+        "--single-branch",
+        "--no-tags",
+        "--branch",
+        config.branch,
+        "--",
+        config.repository,
+        temporary,
+      ],
       { cwd: checkoutRoot, timeoutMs },
     );
     const checkout = await validateSourceCheckoutDirectory(temporary, config);
