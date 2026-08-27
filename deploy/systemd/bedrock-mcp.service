@@ -1,0 +1,44 @@
+[Unit]
+Description=Bedrock Wiki MCP server
+Documentation=https://github.com/PastaHimself/Bedrock-Wiki-Mcp
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=bedrock-mcp
+Group=bedrock-mcp
+WorkingDirectory=/opt/bedrock-wiki-mcp
+EnvironmentFile=/etc/bedrock-mcp/bedrock-mcp.env
+ExecStart=/usr/bin/node /opt/bedrock-wiki-mcp/dist/index.js serve
+Restart=on-failure
+RestartSec=5s
+TimeoutStartSec=30s
+TimeoutStopSec=30s
+KillSignal=SIGTERM
+UMask=0027
+
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+
+# The serving process only needs read access to the published index and source
+# metadata. Scheduled synchronization/indexing is performed by a separate unit.
+ReadOnlyPaths=/var/lib/bedrock-mcp
+
+[Install]
+WantedBy=multi-user.target
