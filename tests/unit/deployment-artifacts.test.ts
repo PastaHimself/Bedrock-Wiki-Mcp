@@ -66,7 +66,8 @@ describe("production deployment artifacts", () => {
     const vps = await text("deploy/VPS.md");
     expect(vps).toContain("BEDROCK_MCP_TRUSTED_PROXY_IPS=127.0.0.1");
     expect(vps).toContain("CF-Connecting-IP");
-    expect(vps).toContain("Leave the setting empty unless the listed peer is the trusted Cloudflare Tunnel process");
+    expect(vps).toContain("Do not copy that setting into an unrelated local proxy topology");
+    expect(vps).toContain("attacker-supplied `CF-Connecting-IP` unchanged");
   });
 
   it("uses a persistent but jittered systemd timer", async () => {

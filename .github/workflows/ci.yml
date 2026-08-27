@@ -50,6 +50,8 @@ jobs:
       - name: Validate deployment artifacts
         run: |
           bash -n deploy/scripts/update-knowledge.sh
+          bash -n deploy/scripts/bootstrap-ubuntu.sh
+          bash -n deploy/scripts/verify-production.sh
           if [[ ! -x /usr/bin/node ]]; then
             sudo ln -s "$(command -v node)" /usr/bin/node
           fi
@@ -92,3 +94,35 @@ jobs:
         run: |
           npm run dev -- version
           npm run dev -- help
+
+  production-lexical-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Build reproducible application
+        run: |
+          npm ci
+          npm run build
+
+      - name: Prune to lexical production runtime
+        run: |
+          npm prune --omit=dev --omit=optional
+          test ! -e node_modules/sqlite-vec
+          test ! -e node_modules/@huggingface/transformers
+          test ! -e node_modules/typescript
+          test ! -e node_modules/vitest
+
+      - name: Built lexical runtime smoke test
+        run: |
+          node dist/index.js version
+          node dist/index.js help
