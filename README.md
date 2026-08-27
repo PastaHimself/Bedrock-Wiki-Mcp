@@ -4,7 +4,7 @@ A self-hosted, read-only Model Context Protocol knowledge server for Minecraft B
 
 ## Status
 
-Milestones 0–4 are merged. Milestone 5 (official-source ingestion from local checkouts) is implemented on a feature branch pending final validation/merge.
+Milestones 0–5 are merged. Milestone 6 (Bedrock-specific aliases and version-aware ranking) is implemented on a feature branch pending final validation/merge.
 
 The current server provides:
 
@@ -15,30 +15,47 @@ The current server provides:
 - SQLite + FTS5 persistence and lexical retrieval
 - Bedrock-aware Markdown, Script API, JSON, JavaScript, and TypeScript ingestion
 - exact identifier lookup plus natural-language FTS search
+- derived Script API runtime aliases such as `world.afterEvents.playerSpawn`
 - stable/preview/historical metadata and ranking
+- Minecraft/API version-compatible filtering and ranking
 - controlled `doc_*` / `chk_*` fetching; no arbitrary filesystem reads
 - official Microsoft/Mojang source ingestion from local Git checkouts
 - no paid API, embedding API, or hosted vector database required
 
-Automated network synchronization (clone/fetch/pull) is intentionally not part of Milestone 5. It belongs to Milestone 7 so normal MCP serving remains read-only and source updates stay an explicit administrative operation.
+Automated network synchronization (clone/fetch/pull) is intentionally not part of Milestone 5 or 6. It belongs to Milestone 7 so normal MCP serving remains read-only and source updates stay an explicit administrative operation.
 
 ## Public MCP tools
 
 The v1 public surface intentionally stays small and read-only:
 
-- `search` — search documentation, API definitions, JSON, and code using exact + lexical retrieval
+- `search` — search documentation, API definitions, JSON, and code using exact + lexical retrieval; optional `minecraftVersion` and `apiVersion` constraints prefer exact provenance, allow compatible numeric prefixes, and retain unversioned material only as fallback evidence
 - `fetch` — fetch server-issued document/chunk IDs with bounded adjacent context
-- `get_definition` — look up an exact Bedrock identifier with stable-first version handling
+- `get_definition` — look up an exact Bedrock identifier with stable-first, version-aware handling
 - `list_sources` — inspect indexed source provenance and trust tiers
 - `list_categories` — inspect categories currently present in the index
 
 The server does not expose arbitrary file reads, shell commands, database writes, or source-update operations as MCP tools.
+
+## Bedrock identifier aliases
+
+Generated Script API documentation often describes a runtime chain across multiple type files. For example, `World.afterEvents` has type `WorldAfterEvents`, while `playerSpawn` is documented on `WorldAfterEvents`.
+
+During index rebuilds the server derives those relationships and materializes exact aliases, so these runtime-style queries resolve to canonical documentation symbols:
+
+```text
+world.afterEvents.playerSpawn
+world.afterEvents.playerSpawn.subscribe
+system.runInterval
+```
+
+Alias derivation is based on documented property signatures and canonical members, not a hand-maintained identifier list. Derived chains are depth-bounded and globally capped during a rebuild. Search and definition responses still return the canonical documented identifier rather than presenting a generated alias as the source symbol.
 
 ## Design constraints
 
 - Public MCP functionality is read-only.
 - Stable Microsoft/Mojang documentation takes priority over preview, historical, or community material.
 - Preview and historical material are distinguishable in metadata and excluded from normal retrieval unless explicitly requested or clearly implied by the query.
+- Known version mismatches are excluded when a version constraint is supplied; exact matches outrank compatible prefixes, and evidence without version provenance remains a lower-ranked fallback.
 - Generated databases and source checkouts are deployment state and are not committed to Git.
 - Retrieval responses are bounded by result and character limits.
 - Official-source index rebuilds are performed into a temporary SQLite database and replace the live index only after validation succeeds.
@@ -114,7 +131,7 @@ Preview sources are excluded by default. Include them explicitly when building a
 npm run dev -- rebuild-sources --include-preview
 ```
 
-The rebuild streams documents instead of holding the whole corpus in RAM. Files outside the configured include/exclude rules, unsupported extensions, symlinks, and oversized files are skipped. Repository revision, branch, canonical file URL, revision-pinned URL, source file hash, and source modification time are preserved as provenance when available.
+The rebuild streams documents instead of holding the whole corpus in RAM. Files outside the configured include/exclude rules, unsupported extensions, symlinks, and oversized files are skipped. Repository revision, branch, canonical file URL, revision-pinned URL, source file hash, and source modification time are preserved as provenance when available. Script API aliases are derived after all selected sources are indexed so cross-file type/member relationships are available.
 
 Source cloning/updating is not performed by `rebuild-sources`; automated synchronization is deferred to Milestone 7.
 
