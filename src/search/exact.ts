@@ -6,8 +6,6 @@ export interface ExactIdentifierHit {
   documentId: string;
   ordinal: number;
   identifier: string;
-  matchedIdentifier: string;
-  aliasType: string;
   title: string;
   content: string;
   path: string;
@@ -34,8 +32,6 @@ interface ExactIdentifierRow {
   document_id: string;
   ordinal: number;
   identifier: string;
-  matched_identifier: string;
-  alias_type: string;
   title: string;
   content: string;
   path: string;
@@ -79,8 +75,6 @@ export function exactIdentifierSearch(
       d.document_id,
       c.ordinal,
       COALESCE(c.identifier, i.identifier) AS identifier,
-      i.identifier AS matched_identifier,
-      i.alias_type,
       c.title,
       c.content,
       d.path,
@@ -136,8 +130,6 @@ export function exactIdentifierSearch(
       documentId: row.document_id,
       ordinal: row.ordinal,
       identifier: row.identifier,
-      matchedIdentifier: row.matched_identifier,
-      aliasType: row.alias_type,
       title: row.title,
       content: row.content,
       path: row.path,
