@@ -30,4 +30,19 @@ describe("ingestion pipeline", () => {
     expect(document.metadata.lifecycle).toBe("historical");
     expect(document.chunks[0]?.lifecycle).toBe("historical");
   });
+
+  it("preserves Minecraft version metadata from protocol JSON schemas", () => {
+    const document = ingestDocument({
+      source: { ...source, channel: "preview" },
+      path: "json/ActorEventPacket.json",
+      content: JSON.stringify({
+        title: "ActorEventPacket",
+        $schema: "http://json-schema.org/draft-07/schema#",
+        "x-minecraft-version": "1.26.50-beta.26",
+        "x-protocol-version": 2192,
+      }),
+    });
+    expect(document.metadata.minecraftVersion).toBe("1.26.50-beta.26");
+    expect(document.identifiers).toContain("ActorEventPacket");
+  });
 });

@@ -38,4 +38,53 @@ describe("Bedrock JSON parser", () => {
     expect(parsed.chunks[0]?.identifier).toBe("controller.animation.example");
     expect(parsed.chunks[0]?.symbolKind).toBe("animation-controller");
   });
+
+  it("chunks Bedrock JSON Schema properties into exact definitions", () => {
+    const parsed = parseBedrockJson(JSON.stringify({
+      $schema: "http://json-schema.org/draft-07/schema#",
+      title: "Block Components",
+      description: "Container for custom block components.",
+      properties: {
+        "minecraft:collision_box": {
+          title: "Minecraft Collision Box",
+          description: "Defines the collision box for this block.",
+          type: "object",
+        },
+        "minecraft:breathability": {
+          description: "Deprecated breathability component.",
+          deprecated: true,
+          type: "object",
+        },
+      },
+    }), "schemas/bp/blocks/block_components.schema.json");
+
+    const collision = parsed.chunks.find((chunk) => chunk.identifier === "minecraft:collision_box");
+    expect(collision?.symbolKind).toBe("property");
+    expect(collision?.jsonPointer).toBe("/properties/minecraft:collision_box");
+    expect(collision?.content).toContain("Defines the collision box");
+
+    const deprecated = parsed.chunks.find((chunk) => chunk.identifier === "minecraft:breathability");
+    expect(deprecated?.lifecycle).toBe("deprecated");
+  });
+
+  it("extracts protocol version context and scoped packet properties", () => {
+    const parsed = parseBedrockJson(JSON.stringify({
+      title: "ActorEventPacket",
+      $schema: "http://json-schema.org/draft-07/schema#",
+      "x-minecraft-version": "1.26.50-beta.26",
+      "x-protocol-version": 2192,
+      properties: {
+        eventId: {
+          description: "Actor event identifier.",
+          type: "integer",
+        },
+      },
+    }), "json/ActorEventPacket.json");
+
+    expect(parsed.minecraftVersion).toBe("1.26.50-beta.26");
+    expect(parsed.chunks[0]?.identifier).toBe("ActorEventPacket");
+    const eventId = parsed.chunks.find((chunk) => chunk.identifier === "ActorEventPacket.eventId");
+    expect(eventId?.symbolKind).toBe("property");
+    expect(eventId?.content).toContain("Actor event identifier");
+  });
 });

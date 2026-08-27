@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -57,7 +57,12 @@ async function pushUpdate(fixture: RemoteFixture, text: string): Promise<string>
   return git(fixture.seed, "rev-parse", "HEAD");
 }
 
-async function writeRegistry(path: string, repository: string, branch = "main"): Promise<void> {
+async function writeRegistry(
+  path: string,
+  repository: string,
+  branch = "main",
+  sparsePaths?: string[],
+): Promise<void> {
   await writeFile(path, JSON.stringify({
     sources: [{
       id: "official_docs",
@@ -67,6 +72,7 @@ async function writeRegistry(path: string, repository: string, branch = "main"):
       repository,
       branch,
       channel: "stable",
+      ...(sparsePaths ? { sparsePaths } : {}),
       include: ["**/*.md"],
     }],
   }));
@@ -105,6 +111,40 @@ describe("configured source synchronization", () => {
     const registry = await loadSourceRegistry(configPath);
     const checkout = await openSourceCheckout(checkoutRoot, registry.sources[0]!);
     expect(checkout.revision).toBe(remoteRevision);
+  });
+
+  it("materializes and updates only explicitly configured sparse directories", async () => {
+    const root = await temporaryDirectory();
+    const fixture = await makeRemote(root, "sparse-remote");
+    await mkdir(join(fixture.seed, "docs"), { recursive: true });
+    await mkdir(join(fixture.seed, "assets"), { recursive: true });
+    await writeFile(join(fixture.seed, "docs", "guide.md"), "guide one\n");
+    await writeFile(join(fixture.seed, "assets", "unused.txt"), "not knowledge\n");
+    await git(fixture.seed, "add", "docs/guide.md", "assets/unused.txt");
+    await git(fixture.seed, "commit", "-m", "add docs and assets");
+    await git(fixture.seed, "push", "origin", "main");
+
+    const dataDir = join(root, "data");
+    const checkoutRoot = join(root, "checkouts");
+    const configPath = join(root, "sources.json");
+    await writeRegistry(configPath, fixture.remoteUrl, "main", ["docs"]);
+
+    const first = await syncConfiguredSources({ dataDir, checkoutRoot, configPath, gitTimeoutMs: 30_000 });
+    expect(first.sources[0]?.status).toBe("cloned");
+    const checkout = join(checkoutRoot, "official_docs");
+    expect(await readFile(join(checkout, "docs", "guide.md"), "utf8")).toBe("guide one\n");
+    await expect(access(join(checkout, "assets", "unused.txt"))).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await git(checkout, "sparse-checkout", "list")).toBe("docs");
+
+    await writeFile(join(fixture.seed, "docs", "guide.md"), "guide two\n");
+    await git(fixture.seed, "add", "docs/guide.md");
+    await git(fixture.seed, "commit", "-m", "update sparse docs");
+    await git(fixture.seed, "push", "origin", "main");
+
+    const updated = await syncConfiguredSources({ dataDir, checkoutRoot, configPath, gitTimeoutMs: 30_000 });
+    expect(updated.sources[0]?.status).toBe("updated");
+    expect(await readFile(join(checkout, "docs", "guide.md"), "utf8")).toBe("guide two\n");
+    expect(await git(checkout, "status", "--porcelain=v1")).toBe("");
   });
 
   it("refuses to overwrite dirty or locally divergent checkouts", async () => {

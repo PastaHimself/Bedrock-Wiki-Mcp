@@ -52,11 +52,18 @@ describe("production deployment artifacts", () => {
     expect(environment).toContain("BEDROCK_MCP_MIN_FREE_BYTES=2147483648");
   });
 
-  it("uses blobless partial clones without narrowing source coverage", async () => {
+  it("uses blobless partial clones and limits only explicitly configured large sources", async () => {
     const sourceSync = await text("src/sources/sync.ts");
     expect(sourceSync).toContain("--filter=blob:none");
     expect(sourceSync).toContain("--single-branch");
-    expect(sourceSync).not.toContain("sparse-checkout");
+    expect(sourceSync).toContain("--sparse");
+    expect(sourceSync).toContain("sparse-checkout");
+    expect(sourceSync).toContain("config.sparsePaths");
+
+    const sourceRegistry = await text("config/sources.json");
+    expect(sourceRegistry).toContain('"id": "bedrock_oss_wiki"');
+    expect(sourceRegistry).toContain('"sparsePaths": [\n        "docs"');
+    expect(sourceRegistry).toContain('"id": "bedrock_samples_stable"');
   });
 
   it("documents Cloudflare Tunnel client-IP trust without enabling generic proxy trust", async () => {

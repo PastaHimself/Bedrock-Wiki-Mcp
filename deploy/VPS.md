@@ -172,13 +172,13 @@ Treat a verifier failure as an incomplete deployment. Fix the reported condition
 
 ## Disk budget
 
-Disk is the tightest resource. New source checkouts use:
+Disk is the tightest resource. New source checkouts always use blobless, single-branch, no-tag clones:
 
 ```text
 git clone --filter=blob:none --single-branch --no-tags
 ```
 
-Sparse checkout is intentionally not enabled because configured stable sources include whole-repository ingestion and narrowing the worktree could silently omit future Bedrock files.
+Whole-repository sources such as the stable Bedrock Samples checkout keep their normal worktree so future Bedrock files are not silently omitted. Sparse checkout is opt-in per source through validated `sparsePaths` in `config/sources.json`. It is used for repositories where the knowledge-bearing subtree is explicit and materially reduces disk usage—for example, only `docs/` from the large `Bedrock-OSS/bedrock-wiki` repository and targeted schema/protocol/tooling directories. Sparse paths are repository-relative directories, are validated before being passed to Git, and are re-applied during source updates.
 
 The updater keeps a fixed free-space reserve and operation-specific headroom. With the default profile it requires at least 2 GiB free plus the larger of the estimated online-backup requirement or 1.5 times the current lexical database size for an atomic replacement build. It checks again after backup and source synchronization.
 

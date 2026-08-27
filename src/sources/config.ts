@@ -15,6 +15,19 @@ export function isSafeGitBranch(value: string): boolean {
   return /^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(value);
 }
 
+export function isSafeSparsePath(value: string): boolean {
+  if (!value || value.length > 300) return false;
+  if (value.startsWith("-") || value.startsWith("/") || value.endsWith("/")) return false;
+  if (value.includes("\\") || value.includes("//")) return false;
+  const segments = value.split("/");
+  if (segments.some((segment) => segment.length === 0 || segment === "." || segment === "..")) return false;
+  return /^[A-Za-z0-9._/-]+$/.test(value);
+}
+
+const sparsePathsSchema = z.array(
+  z.string().trim().min(1).max(300).refine(isSafeSparsePath, "sparse path must be a safe repository-relative directory"),
+).max(20).refine((paths) => new Set(paths).size === paths.length, "sparse paths must be unique");
+
 const sourceConfigEntrySchema = z.object({
   id: z.string().regex(/^[a-z0-9][a-z0-9_-]{1,63}$/),
   name: z.string().trim().min(1).max(200),
@@ -23,6 +36,7 @@ const sourceConfigEntrySchema = z.object({
   repository: z.string().url(),
   branch: z.string().trim().min(1).max(200).refine(isSafeGitBranch, "branch is not a safe Git branch name"),
   channel: releaseChannelSchema,
+  sparsePaths: sparsePathsSchema.optional(),
   include: z.array(z.string().trim().min(1).max(500)).max(100).optional(),
   exclude: z.array(z.string().trim().min(1).max(500)).max(100).optional(),
   defaultEnabled: z.boolean().default(true),
@@ -40,6 +54,7 @@ export interface SourceConfigEntry {
   readonly repository: string;
   readonly branch: string;
   readonly channel: ReleaseChannel;
+  readonly sparsePaths?: readonly string[];
   readonly include?: readonly string[];
   readonly exclude?: readonly string[];
   readonly defaultEnabled: boolean;
@@ -67,6 +82,7 @@ export async function loadSourceRegistry(path = "config/sources.json"): Promise<
       branch: source.branch,
       channel: source.channel,
       defaultEnabled: source.defaultEnabled,
+      ...(source.sparsePaths !== undefined ? { sparsePaths: source.sparsePaths } : {}),
       ...(source.include !== undefined ? { include: source.include } : {}),
       ...(source.exclude !== undefined ? { exclude: source.exclude } : {}),
     });

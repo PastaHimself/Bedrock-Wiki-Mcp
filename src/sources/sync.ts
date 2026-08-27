@@ -119,6 +119,11 @@ async function targetExists(path: string): Promise<boolean> {
   }
 }
 
+async function applySparseCheckout(directory: string, config: SourceConfigEntry, timeoutMs: number): Promise<void> {
+  if (!config.sparsePaths?.length) return;
+  await runGit(["sparse-checkout", "set", "--cone", ...config.sparsePaths], { cwd: directory, timeoutMs });
+}
+
 async function cloneSource(
   checkoutRoot: string,
   config: SourceConfigEntry,
@@ -132,6 +137,7 @@ async function cloneSource(
       [
         "clone",
         "--filter=blob:none",
+        ...(config.sparsePaths?.length ? ["--sparse"] : []),
         "--single-branch",
         "--no-tags",
         "--branch",
@@ -142,6 +148,7 @@ async function cloneSource(
       ],
       { cwd: checkoutRoot, timeoutMs },
     );
+    await applySparseCheckout(temporary, config, timeoutMs);
     const checkout = await validateSourceCheckoutDirectory(temporary, config);
     await rename(temporary, target);
     return {
@@ -169,6 +176,7 @@ async function updateSource(
   timeoutMs: number,
 ): Promise<SourceSyncStats> {
   const before = await openSourceCheckout(checkoutRoot, config);
+  await applySparseCheckout(before.directory, config, timeoutMs);
   await assertCleanWorktree(before.directory, config.id, timeoutMs);
 
   const remoteRef = `refs/remotes/origin/${config.branch}`;
@@ -200,6 +208,7 @@ async function updateSource(
   }
 
   await runGit(["merge", "--ff-only", "--no-edit", remoteRef], { cwd: before.directory, timeoutMs });
+  await applySparseCheckout(before.directory, config, timeoutMs);
   await assertCleanWorktree(before.directory, config.id, timeoutMs);
   const after = await validateSourceCheckoutDirectory(before.directory, config);
   if (after.revision !== remoteRevision) {
