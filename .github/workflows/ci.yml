@@ -35,6 +35,17 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: Validate deployment artifacts
+        run: |
+          bash -n deploy/scripts/update-knowledge.sh
+          if [[ ! -x /usr/bin/node ]]; then
+            sudo ln -s "$(command -v node)" /usr/bin/node
+          fi
+          systemd-analyze verify \
+            deploy/systemd/bedrock-mcp.service \
+            deploy/systemd/bedrock-mcp-update.service \
+            deploy/systemd/bedrock-mcp-update.timer
+
       - name: Build
         run: npm run build
 

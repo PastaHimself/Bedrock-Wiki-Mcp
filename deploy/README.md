@@ -1,0 +1,215 @@
+# Production deployment
+
+This directory contains deployment templates for the production milestone. The public MCP server remains read-only; source synchronization and index replacement are explicit administrative operations.
+
+## Recommended Ubuntu layout
+
+```text
+/opt/bedrock-wiki-mcp/          application checkout/build (root-owned)
+/etc/bedrock-mcp/               production environment configuration (root-owned)
+/var/lib/bedrock-mcp/           persistent index, source checkouts, update lock
+```
+
+Recommended service identity:
+
+```bash
+sudo useradd --system \
+  --home-dir /var/lib/bedrock-mcp \
+  --create-home \
+  --shell /usr/sbin/nologin \
+  bedrock-mcp
+sudo install -d -o bedrock-mcp -g bedrock-mcp -m 0750 /var/lib/bedrock-mcp
+sudo install -d -o root -g bedrock-mcp -m 0750 /etc/bedrock-mcp
+```
+
+Install Node.js 24, npm, Git, `flock`/`runuser` (normally supplied by `util-linux` on Ubuntu), and your selected HTTPS ingress. The supplied systemd templates assume Node is `/usr/bin/node`; change the unit if your Node installation lives elsewhere.
+
+Clone/copy the repository to `/opt/bedrock-wiki-mcp`, then build it:
+
+```bash
+cd /opt/bedrock-wiki-mcp
+sudo npm ci
+sudo npm run check
+sudo npm run build
+```
+
+The application directory should not be writable by `bedrock-mcp`; deployment code and persistent knowledge state are deliberately separated.
+
+## Production environment
+
+Copy the template and edit it as root:
+
+```bash
+sudo install -m 0640 -o root -g bedrock-mcp \
+  deploy/systemd/bedrock-mcp.env.example \
+  /etc/bedrock-mcp/bedrock-mcp.env
+sudo editor /etc/bedrock-mcp/bedrock-mcp.env
+```
+
+At minimum, set:
+
+- `NODE_ENV=production`
+- `BEDROCK_MCP_DATA_DIR=/var/lib/bedrock-mcp`
+- `BEDROCK_MCP_ALLOWED_HOSTS` to the exact public hostname
+- `BEDROCK_MCP_BEARER_TOKEN` when the target MCP client supports bearer authentication
+
+The Node service should normally bind only to `127.0.0.1:8080`. Do not expose SQLite, source-update commands, or an administrative port.
+
+## systemd
+
+Install the units:
+
+```bash
+sudo install -m 0644 deploy/systemd/bedrock-mcp.service /etc/systemd/system/bedrock-mcp.service
+sudo install -m 0644 deploy/systemd/bedrock-mcp-update.service /etc/systemd/system/bedrock-mcp-update.service
+sudo install -m 0644 deploy/systemd/bedrock-mcp-update.timer /etc/systemd/system/bedrock-mcp-update.timer
+sudo systemctl daemon-reload
+```
+
+Perform the first source synchronization/index build before starting the public service:
+
+```bash
+sudo systemctl start bedrock-mcp-update.service
+sudo systemctl status bedrock-mcp-update.service
+```
+
+Then enable the server and scheduled refresh:
+
+```bash
+sudo systemctl enable --now bedrock-mcp.service
+sudo systemctl enable --now bedrock-mcp-update.timer
+```
+
+Useful diagnostics:
+
+```bash
+systemctl status bedrock-mcp.service
+systemctl status bedrock-mcp-update.timer
+systemctl list-timers bedrock-mcp-update.timer
+journalctl -u bedrock-mcp.service -n 200 --no-pager
+journalctl -u bedrock-mcp-update.service -n 200 --no-pager
+curl --fail --silent http://127.0.0.1:8080/health
+```
+
+The timer runs once per day with randomized delay. Change `OnCalendar=` in the timer if a different cadence is required.
+
+### Why the updater restarts the server
+
+`rebuild-sources` creates and validates a separate SQLite database, closes it, then atomically renames it over the published index. This protects the live index from partial rebuilds. A process that already has the old SQLite file open continues using that old inode, so the update unit restarts `bedrock-mcp.service` only after synchronization, rebuild, and validation all succeed.
+
+A failed refresh leaves the currently published index and running service untouched.
+
+## HTTPS option A: public IPv6 + Caddy
+
+For an IPv6-only VPS with direct inbound connectivity:
+
+1. Create an `AAAA` record for `bedrock-mcp.example.com` pointing to the VPS IPv6 address.
+2. Allow inbound TCP 80/443 in the host/provider firewall.
+3. Keep Node bound to `127.0.0.1:8080`.
+4. Install Caddy and copy `deploy/caddy/Caddyfile.example` to your Caddy configuration.
+5. Replace the example hostname and reload Caddy.
+
+Example checks:
+
+```bash
+curl -6 --fail https://bedrock-mcp.example.com/health
+curl --fail https://bedrock-mcp.example.com/health
+```
+
+The second command also tests whether the hostname is reachable to IPv4-only clients. A DNS-only `AAAA` origin cannot serve IPv4-only clients directly; use a dual-stack reverse proxy/CDN or Cloudflare Tunnel when that matters.
+
+## HTTPS option B: Cloudflare Tunnel
+
+Cloudflare Tunnel is appropriate when the VPS has no convenient public ingress, is IPv6-only but clients may be IPv4-only, or you do not want inbound HTTP/HTTPS firewall rules.
+
+The application still binds to `127.0.0.1:8080`; `cloudflared` establishes the outbound connection and publishes the hostname.
+
+Use `deploy/cloudflare/config.yml.example` as the local ingress template after creating the tunnel and credentials. Keep the final catch-all `http_status:404` rule.
+
+With Tunnel, do not expose port 8080 publicly. `BEDROCK_MCP_ALLOWED_HOSTS` should still be the public MCP hostname.
+
+## Reverse-proxy behavior
+
+The MCP transport can return JSON or long-lived streaming HTTP responses. Do not configure a proxy to buffer streaming responses aggressively, and do not add a short global request timeout to `/mcp`. The supplied Caddy configuration uses normal streaming reverse-proxy behavior and leaves the MCP endpoint path unchanged:
+
+```text
+https://bedrock-mcp.example.com/mcp
+```
+
+Health remains:
+
+```text
+https://bedrock-mcp.example.com/health
+```
+
+## Backups
+
+The authoritative knowledge sources are upstream Git repositories and the index is reproducibly generated, so the SQLite database does not need to be treated as irreplaceable data. Still, production deployments should back up at least:
+
+- `/etc/bedrock-mcp/bedrock-mcp.env` using a secret-capable backup system
+- any deliberately curated local knowledge not recoverable from Git
+- optionally `/var/lib/bedrock-mcp/index/bedrock.db` to reduce recovery time
+
+Do not publish backups containing bearer tokens or other deployment secrets.
+
+## Pterodactyl deployment
+
+Pterodactyl does not provide systemd or sudo inside the server container. Use persistent `/home/container` storage and keep every mutable path beneath it.
+
+Recommended environment:
+
+```text
+NODE_ENV=production
+BEDROCK_MCP_HOST=0.0.0.0
+BEDROCK_MCP_PORT=<allocated panel port>
+BEDROCK_MCP_DATA_DIR=/home/container/data
+BEDROCK_MCP_ALLOWED_HOSTS=<public hostname>
+```
+
+Install/build during initial setup or an install script:
+
+```bash
+npm ci
+npm run build
+```
+
+Panel startup command:
+
+```bash
+node dist/index.js serve
+```
+
+Initial knowledge setup from the Pterodactyl console:
+
+```bash
+node dist/index.js sync-sources
+node dist/index.js rebuild-sources
+node dist/index.js validate-index
+```
+
+For periodic updates, use a Pterodactyl scheduled task to run the same three commands in sequence, followed by a panel restart action. The restart is required for the running process to open the newly published SQLite database.
+
+Do not run `npm ci` on every normal server restart unless the panel installation model requires it; dependencies and `dist/` should already exist on persistent storage.
+
+TLS normally terminates outside the Pterodactyl container (panel/reverse proxy/CDN). Expose only the panel-allocated application port to that proxy.
+
+## Deployment verification checklist
+
+Before considering a deployment healthy:
+
+```text
+[ ] Node.js major version is 24
+[ ] npm ci / typecheck / tests / build pass on deployed revision
+[ ] sync-sources succeeds
+[ ] rebuild-sources succeeds
+[ ] validate-index reports ok=true
+[ ] Node binds only to intended host/port
+[ ] /health returns 200 through localhost and public HTTPS
+[ ] /mcp is reachable through HTTPS
+[ ] public hostname is present in BEDROCK_MCP_ALLOWED_HOSTS
+[ ] bearer authentication is configured when supported by the client
+[ ] update timer/scheduled task is enabled
+[ ] failed updates do not replace the current index
+[ ] successful updates restart the serving process
+[ ] no database/admin port is publicly exposed
+```

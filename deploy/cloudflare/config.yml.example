@@ -1,0 +1,16 @@
+# Cloudflare Tunnel option for hosts that should not expose inbound HTTP/HTTPS
+# ports (including IPv6-only or tightly firewalled VPS deployments).
+#
+# Create the tunnel/credentials with cloudflared first, then replace the UUID,
+# credentials path, and hostname below.
+
+tunnel: 00000000-0000-0000-0000-000000000000
+credentials-file: /etc/cloudflared/00000000-0000-0000-0000-000000000000.json
+
+ingress:
+  - hostname: bedrock-mcp.example.com
+    service: http://127.0.0.1:8080
+    originRequest:
+      connectTimeout: 10s
+      noHappyEyeballs: false
+  - service: http_status:404
