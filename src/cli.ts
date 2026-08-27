@@ -10,11 +10,14 @@ import { rebuildConfiguredSourcesIndex } from "./db/source-indexer.js";
 import { validateIndex } from "./db/validate.js";
 import type { SourceDescriptor } from "./models/source.js";
 import { close, createHttpServer, listen } from "./server.js";
+import { syncConfiguredSources } from "./sources/sync.js";
 
 const HELP = `Bedrock Wiki MCP ${SERVICE_VERSION}
 
 Usage:
   bedrock-mcp serve                                  Start the HTTP MCP server using the existing read-only index
+  bedrock-mcp sync-sources [checkout-root]           Clone/fetch configured source checkouts safely
+                         [--include-preview]          Include preview sources disabled by default
   bedrock-mcp rebuild-index [directory]              Rebuild the local curated knowledge index
   bedrock-mcp rebuild-sources [checkout-root]        Rebuild from configured official source checkouts
                          [--include-preview]          Include preview sources disabled by default
@@ -37,6 +40,18 @@ Environment:
 
 function indexPath(dataDir: string): string {
   return join(dataDir, "index", "bedrock.db");
+}
+
+function sourceCommandArguments(command: string, args: readonly string[]): { includePreview: boolean; checkoutRoot?: string } {
+  const includePreview = args.includes("--include-preview");
+  const unknownFlags = args.filter((arg) => arg.startsWith("--") && arg !== "--include-preview");
+  if (unknownFlags.length > 0) throw new Error(`Unknown ${command} option: ${unknownFlags[0]}`);
+  const positional = args.filter((arg) => !arg.startsWith("--"));
+  if (positional.length > 1) throw new Error(`${command} accepts at most one checkout-root argument`);
+  return {
+    includePreview,
+    ...(positional[0] ? { checkoutRoot: resolve(process.cwd(), positional[0]) } : {}),
+  };
 }
 
 async function rebuildIndex(directoryArg: string | undefined): Promise<number> {
@@ -62,24 +77,37 @@ async function rebuildIndex(directoryArg: string | undefined): Promise<number> {
   }
 }
 
-async function rebuildSources(args: readonly string[]): Promise<number> {
-  const includePreview = args.includes("--include-preview");
-  const unknownFlags = args.filter((arg) => arg.startsWith("--") && arg !== "--include-preview");
-  if (unknownFlags.length > 0) throw new Error(`Unknown rebuild-sources option: ${unknownFlags[0]}`);
-  const positional = args.filter((arg) => !arg.startsWith("--"));
-  if (positional.length > 1) throw new Error("rebuild-sources accepts at most one checkout-root argument");
-
+async function syncSources(args: readonly string[]): Promise<number> {
+  const parsed = sourceCommandArguments("sync-sources", args);
   const config = loadRuntimeConfig();
-  const checkoutRoot = positional[0] ? resolve(process.cwd(), positional[0]) : undefined;
+  const result = await syncConfiguredSources({
+    dataDir: config.dataDir,
+    includePreview: parsed.includePreview,
+    ...(parsed.checkoutRoot ? { checkoutRoot: parsed.checkoutRoot } : {}),
+  });
+
+  for (const source of result.sources) {
+    const previous = source.previousRevision ? ` ${source.previousRevision.slice(0, 12)} ->` : "";
+    process.stdout.write(
+      `${source.sourceId}: ${source.status}${previous} ${source.revision.slice(0, 12)} (${source.branch})\n`,
+    );
+  }
+  process.stdout.write(`Synchronized ${result.sources.length} sources under ${result.checkoutRoot}.\n`);
+  return 0;
+}
+
+async function rebuildSources(args: readonly string[]): Promise<number> {
+  const parsed = sourceCommandArguments("rebuild-sources", args);
+  const config = loadRuntimeConfig();
   const result = await rebuildConfiguredSourcesIndex({
     dataDir: config.dataDir,
-    includePreview,
-    ...(checkoutRoot ? { checkoutRoot } : {}),
+    includePreview: parsed.includePreview,
+    ...(parsed.checkoutRoot ? { checkoutRoot: parsed.checkoutRoot } : {}),
   });
   const documents = result.sources.reduce((sum, source) => sum + source.documents, 0);
   const chunks = result.sources.reduce((sum, source) => sum + source.chunks, 0);
   process.stdout.write(
-    `Indexed ${result.sources.length} sources, ${documents} documents, ${chunks} chunks into ${result.targetPath}.\n`,
+    `Indexed ${result.sources.length} sources, ${documents} documents, ${chunks} chunks, ${result.aliasesDerived} derived aliases into ${result.targetPath}.\n`,
   );
   return 0;
 }
@@ -164,6 +192,7 @@ export async function runCli(args: readonly string[] = process.argv.slice(2)): P
     return 0;
   }
 
+  if (command === "sync-sources") return syncSources(args.slice(1));
   if (command === "rebuild-index") return rebuildIndex(args[1]);
   if (command === "rebuild-sources") return rebuildSources(args.slice(1));
   if (command === "validate-index") return validateIndexCommand();

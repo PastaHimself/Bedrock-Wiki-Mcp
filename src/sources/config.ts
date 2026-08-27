@@ -7,13 +7,21 @@ import type { SourceDescriptor, SourceTier } from "../models/source.js";
 const sourceTierSchema = z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]);
 const releaseChannelSchema = z.enum(["stable", "preview", "unknown"]);
 
+export function isSafeGitBranch(value: string): boolean {
+  if (!value || value.length > 200) return false;
+  if (value.startsWith("-") || value.startsWith(".") || value.endsWith(".") || value.endsWith("/")) return false;
+  if (value.includes("..") || value.includes("@{") || value.includes("\\") || value.includes("//")) return false;
+  if (value.split("/").some((segment) => segment.length === 0 || segment.startsWith(".") || segment.endsWith(".lock"))) return false;
+  return /^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(value);
+}
+
 const sourceConfigEntrySchema = z.object({
   id: z.string().regex(/^[a-z0-9][a-z0-9_-]{1,63}$/),
   name: z.string().trim().min(1).max(200),
   type: z.literal("git"),
   tier: sourceTierSchema,
   repository: z.string().url(),
-  branch: z.string().trim().min(1).max(200),
+  branch: z.string().trim().min(1).max(200).refine(isSafeGitBranch, "branch is not a safe Git branch name"),
   channel: releaseChannelSchema,
   include: z.array(z.string().trim().min(1).max(500)).max(100).optional(),
   exclude: z.array(z.string().trim().min(1).max(500)).max(100).optional(),
@@ -64,6 +72,16 @@ export async function loadSourceRegistry(path = "config/sources.json"): Promise<
     });
   }
   return { sources };
+}
+
+export function selectConfiguredSources(
+  sources: readonly SourceConfigEntry[],
+  includePreview: boolean,
+): SourceConfigEntry[] {
+  return sources.filter((source) => {
+    if (source.channel === "preview") return includePreview;
+    return source.defaultEnabled;
+  });
 }
 
 export function sourceDescriptor(config: SourceConfigEntry, revision?: string): SourceDescriptor {

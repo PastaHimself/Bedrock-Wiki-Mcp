@@ -4,7 +4,7 @@ A self-hosted, read-only Model Context Protocol knowledge server for Minecraft B
 
 ## Status
 
-Milestones 0–5 are merged. Milestone 6 (Bedrock-specific aliases and version-aware ranking) is implemented on a feature branch pending final validation/merge.
+Milestones 0–6 are merged. Milestone 7 (safe administrative upstream source synchronization) is implemented on a feature branch pending final validation/merge.
 
 The current server provides:
 
@@ -19,10 +19,11 @@ The current server provides:
 - stable/preview/historical metadata and ranking
 - Minecraft/API version-compatible filtering and ranking
 - controlled `doc_*` / `chk_*` fetching; no arbitrary filesystem reads
-- official Microsoft/Mojang source ingestion from local Git checkouts
+- official Microsoft/Mojang source ingestion from verified local Git checkouts
+- explicit administrative source clone/fetch/fast-forward synchronization
 - no paid API, embedding API, or hosted vector database required
 
-Automated network synchronization (clone/fetch/pull) is intentionally not part of Milestone 5 or 6. It belongs to Milestone 7 so normal MCP serving remains read-only and source updates stay an explicit administrative operation.
+Network synchronization remains an administrative process operation. Normal MCP serving is read-only and public MCP tools cannot clone, fetch, update, rebuild, or otherwise mutate source/index state.
 
 ## Public MCP tools
 
@@ -34,7 +35,7 @@ The v1 public surface intentionally stays small and read-only:
 - `list_sources` — inspect indexed source provenance and trust tiers
 - `list_categories` — inspect categories currently present in the index
 
-The server does not expose arbitrary file reads, shell commands, database writes, or source-update operations as MCP tools.
+The server does not expose arbitrary file reads, shell commands, database writes, source synchronization, or index-update operations as MCP tools.
 
 ## Bedrock identifier aliases
 
@@ -59,6 +60,7 @@ Alias derivation is based on documented property signatures and canonical member
 - Generated databases and source checkouts are deployment state and are not committed to Git.
 - Retrieval responses are bounded by result and character limits.
 - Official-source index rebuilds are performed into a temporary SQLite database and replace the live index only after validation succeeds.
+- Existing source checkouts are never reset or force-updated by synchronization; dirty, locally-ahead, or divergent checkouts fail closed.
 
 ## Configured official knowledge sources
 
@@ -77,6 +79,7 @@ Requirements:
 
 - Node.js 24.x
 - npm
+- Git available on `PATH` for `sync-sources`
 
 Install reproducibly:
 
@@ -100,9 +103,9 @@ npm run dev -- rebuild-index
 npm run dev -- rebuild-index /path/to/knowledge
 ```
 
-### Official source checkouts
+### Official source synchronization
 
-Milestone 5 expects source repositories to already exist as local Git checkouts. By default they live under:
+By default, configured source checkouts live under:
 
 ```text
 data/sources/ms_creator_docs/
@@ -111,21 +114,43 @@ data/sources/bedrock_samples_preview/
 data/sources/minecraft_samples/
 ```
 
-Each checkout directory name must match the source `id` in `config/sources.json`.
+Synchronize the stable/default-enabled sources:
 
-To rebuild the official-source index from the default checkout root:
+```bash
+npm run dev -- sync-sources
+```
+
+Use a different checkout root:
+
+```bash
+npm run dev -- sync-sources /srv/bedrock-sources
+```
+
+Include preview sources explicitly:
+
+```bash
+npm run dev -- sync-sources --include-preview
+```
+
+Missing sources are cloned into a temporary sibling directory, validated for configured origin/branch/revision, then renamed into place. Existing sources must already pass the same trust checks and have a clean worktree. Synchronization fetches the configured branch and updates only when the local commit is an ancestor of the fetched remote commit; locally-ahead, diverged, detached, wrong-origin, wrong-branch, dirty, symlinked, or otherwise invalid checkouts are rejected instead of being reset.
+
+Git commands run without an interactive credential prompt and with bounded execution time/output. The configured branch syntax is validated before it can be used as a Git argument.
+
+### Official source indexing
+
+After synchronization, rebuild the official-source index from the same checkout root:
 
 ```bash
 npm run dev -- rebuild-sources
 ```
 
-To use a different checkout root:
+Or, for a custom checkout root:
 
 ```bash
 npm run dev -- rebuild-sources /srv/bedrock-sources
 ```
 
-Preview sources are excluded by default. Include them explicitly when building an index that should contain preview material:
+Preview sources are also excluded from indexing by default. Include them explicitly when building a preview-aware index:
 
 ```bash
 npm run dev -- rebuild-sources --include-preview
@@ -133,9 +158,15 @@ npm run dev -- rebuild-sources --include-preview
 
 The rebuild streams documents instead of holding the whole corpus in RAM. Files outside the configured include/exclude rules, unsupported extensions, symlinks, and oversized files are skipped. Repository revision, branch, canonical file URL, revision-pinned URL, source file hash, and source modification time are preserved as provenance when available. Script API aliases are derived after all selected sources are indexed so cross-file type/member relationships are available.
 
-Source cloning/updating is not performed by `rebuild-sources`; automated synchronization is deferred to Milestone 7.
+A typical administrative refresh is therefore:
 
-Validate the SQLite/FTS index:
+```bash
+npm run dev -- sync-sources
+npm run dev -- rebuild-sources
+npm run dev -- validate-index
+```
+
+Validate the SQLite/FTS index independently:
 
 ```bash
 npm run dev -- validate-index
@@ -183,6 +214,7 @@ TLS should terminate at a reverse proxy or tunnel; the Node process should norma
 
 ```text
 bedrock-mcp serve
+bedrock-mcp sync-sources [checkout-root] [--include-preview]
 bedrock-mcp rebuild-index [directory]
 bedrock-mcp rebuild-sources [checkout-root] [--include-preview]
 bedrock-mcp validate-index
@@ -190,7 +222,7 @@ bedrock-mcp version
 bedrock-mcp help
 ```
 
-Index/source update commands are administrative process operations and are not public MCP tools.
+Synchronization and index/source update commands are administrative process operations and are not public MCP tools.
 
 ## Repository data policy
 

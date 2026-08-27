@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, rename, rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { loadSourceRegistry, sourceDescriptor, type SourceConfigEntry } from "../sources/config.js";
+import { loadSourceRegistry, selectConfiguredSources, sourceDescriptor } from "../sources/config.js";
 import { openSourceCheckout, sourceCheckoutRoot, walkSourceCheckoutDocuments } from "../sources/checkout.js";
 import { deriveScriptApiAliases } from "./aliases.js";
 import { openDatabase } from "./connection.js";
@@ -31,13 +31,6 @@ export interface RebuildSourcesIndexResult {
   validation: IndexValidationReport;
 }
 
-function enabledSources(sources: readonly SourceConfigEntry[], includePreview: boolean): SourceConfigEntry[] {
-  return sources.filter((source) => {
-    if (source.channel === "preview") return includePreview;
-    return source.defaultEnabled;
-  });
-}
-
 async function cleanupBuildFiles(path: string): Promise<void> {
   await Promise.all([
     rm(path, { force: true }),
@@ -60,7 +53,7 @@ export async function rebuildConfiguredSourcesIndex(
   const targetPath = join(dataDir, "index", "bedrock.db");
   const checkoutRoot = resolve(options.checkoutRoot ?? sourceCheckoutRoot(dataDir));
   const registry = await loadSourceRegistry(options.configPath ?? "config/sources.json");
-  const selected = enabledSources(registry.sources, options.includePreview ?? false);
+  const selected = selectConfiguredSources(registry.sources, options.includePreview ?? false);
   if (selected.length === 0) throw new Error("SOURCE_REGISTRY_EMPTY: no enabled sources were selected");
 
   await mkdir(dirname(targetPath), { recursive: true });
