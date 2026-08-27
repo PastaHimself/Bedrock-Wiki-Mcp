@@ -1,6 +1,9 @@
 import { mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
+import { createBackup } from "./admin/backup.js";
+import { formatBenchmarkSummary, loadBenchmarkSuite, runBenchmark } from "./admin/benchmark.js";
+import { formatIndexStatus, readIndexStatus } from "./admin/status.js";
 import { loadRuntimeConfig } from "./config.js";
 import { MCP_PATH, SERVICE_NAME, SERVICE_VERSION } from "./constants.js";
 import { openDatabase } from "./db/connection.js";
@@ -27,6 +30,9 @@ Usage:
   bedrock-mcp rebuild-sources [checkout-root]        Rebuild from configured official source checkouts
                          [--include-preview]          Include preview sources disabled by default
   bedrock-mcp build-semantic-index                   Build optional local vector index from bedrock.db
+  bedrock-mcp status [--json]                        Show index health, counts, revisions, and source coverage
+  bedrock-mcp backup [destination] [--retain=N]      Create online SQLite/config/local-knowledge backup
+  bedrock-mcp benchmark [file] [--json]              Run retrieval quality benchmark (default: benchmarks/search-queries.json)
   bedrock-mcp validate-index                         Validate SQLite/index integrity
   bedrock-mcp version                                Print the version
   bedrock-mcp help                                   Show this help
@@ -149,6 +155,72 @@ async function buildSemanticIndex(): Promise<number> {
   }
 }
 
+async function statusCommand(args: readonly string[]): Promise<number> {
+  const json = args.includes("--json");
+  const unknown = args.filter((arg) => arg !== "--json");
+  if (unknown.length > 0) throw new Error(`Unknown status option: ${unknown[0]}`);
+  const config = loadRuntimeConfig();
+  const path = indexPath(config.dataDir);
+  const database = openServingDatabase(path);
+  try {
+    const report = await readIndexStatus(database, path);
+    process.stdout.write(json ? `${JSON.stringify(report, null, 2)}\n` : formatIndexStatus(report));
+    return report.validation.ok ? 0 : 1;
+  } finally {
+    database.close();
+  }
+}
+
+function backupArguments(args: readonly string[]): { destinationRoot?: string; retain?: number } {
+  const positional = args.filter((arg) => !arg.startsWith("--"));
+  if (positional.length > 1) throw new Error("backup accepts at most one destination argument");
+  let retain: number | undefined;
+  for (const arg of args.filter((value) => value.startsWith("--"))) {
+    const match = /^--retain=(\d+)$/.exec(arg);
+    if (!match?.[1]) throw new Error(`Unknown backup option: ${arg}`);
+    retain = Number(match[1]);
+  }
+  return {
+    ...(positional[0] ? { destinationRoot: resolve(process.cwd(), positional[0]) } : {}),
+    ...(retain !== undefined ? { retain } : {}),
+  };
+}
+
+async function backupCommand(args: readonly string[]): Promise<number> {
+  const parsed = backupArguments(args);
+  const config = loadRuntimeConfig();
+  const result = await createBackup({
+    dataDir: config.dataDir,
+    projectRoot: process.cwd(),
+    ...(parsed.destinationRoot ? { destinationRoot: parsed.destinationRoot } : {}),
+    ...(parsed.retain !== undefined ? { retain: parsed.retain } : {}),
+  });
+  process.stdout.write(`Backup created at ${result.directory} (${result.files.length} files).\n`);
+  if (result.removedBackups.length > 0) {
+    process.stdout.write(`Pruned ${result.removedBackups.length} old backup(s): ${result.removedBackups.join(", ")}\n`);
+  }
+  return 0;
+}
+
+async function benchmarkCommand(args: readonly string[]): Promise<number> {
+  const json = args.includes("--json");
+  const unknownFlags = args.filter((arg) => arg.startsWith("--") && arg !== "--json");
+  if (unknownFlags.length > 0) throw new Error(`Unknown benchmark option: ${unknownFlags[0]}`);
+  const positional = args.filter((arg) => !arg.startsWith("--"));
+  if (positional.length > 1) throw new Error("benchmark accepts at most one benchmark-file argument");
+  const suitePath = resolve(process.cwd(), positional[0] ?? "benchmarks/search-queries.json");
+  const suite = await loadBenchmarkSuite(suitePath);
+  const config = loadRuntimeConfig();
+  const database = openServingDatabase(indexPath(config.dataDir));
+  try {
+    const summary = runBenchmark(database, suite);
+    process.stdout.write(json ? `${JSON.stringify(summary, null, 2)}\n` : formatBenchmarkSummary(summary));
+    return summary.passedTargets ? 0 : 1;
+  } finally {
+    database.close();
+  }
+}
+
 function validateIndexCommand(): number {
   const config = loadRuntimeConfig();
   const database = openDatabase(indexPath(config.dataDir));
@@ -255,6 +327,9 @@ export async function runCli(args: readonly string[] = process.argv.slice(2)): P
   if (command === "rebuild-index") return rebuildIndex(args[1]);
   if (command === "rebuild-sources") return rebuildSources(args.slice(1));
   if (command === "build-semantic-index") return buildSemanticIndex();
+  if (command === "status") return statusCommand(args.slice(1));
+  if (command === "backup") return backupCommand(args.slice(1));
+  if (command === "benchmark") return benchmarkCommand(args.slice(1));
   if (command === "validate-index") return validateIndexCommand();
   if (command === "serve") return serve();
 
