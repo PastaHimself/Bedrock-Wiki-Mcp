@@ -125,7 +125,7 @@ describe("source checkout ingestion", () => {
     expect(documents).toHaveLength(1);
     expect(documents[0]?.metadata.path).toBe("docs/health.md");
     expect(documents[0]?.metadata.revision).toBe(REVISION);
-    expect(documents[0]?.metadata.sourceFileHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(documents[0]?.metadata.sourceFileHash).toMatch(/^sha256:[a-f0-9]{64}$/);
     expect(documents[0]?.metadata.canonicalUrl).toBe("https://github.com/example/docs/blob/main/docs/health.md");
     expect(documents[0]?.metadata.revisionUrl).toBe(`https://github.com/example/docs/blob/${REVISION}/docs/health.md`);
   });
