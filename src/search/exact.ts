@@ -86,7 +86,7 @@ export function exactIdentifierSearch(
       s.id AS source_id,
       s.name AS source_name,
       s.tier AS source_tier,
-      i.is_primary,
+      CASE WHEN c.identifier IS NOT NULL THEN 1 ELSE i.is_primary END AS is_primary,
       d.repository,
       d.revision,
       d.canonical_url,
