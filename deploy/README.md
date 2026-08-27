@@ -33,10 +33,12 @@ sudo npm run check
 sudo npm run build
 ```
 
-For a lexical-only low-resource host, the Transformers.js/sqlite-vec runtime is optional and can be omitted after building a deployable revision, or in a runtime-only installation that already has `dist/`:
+For a lexical-only low-resource host, omit the Transformers.js/sqlite-vec runtime during the build as well as in production:
 
 ```bash
 sudo npm ci --omit=optional
+sudo npm run build
+sudo npm prune --omit=dev --omit=optional
 ```
 
 Do not enable `BEDROCK_MCP_SEMANTIC_ENABLED` on an installation that omitted optional dependencies. The application directory should not be writable by `bedrock-mcp`; deployment code and persistent knowledge state are deliberately separated.
@@ -195,10 +197,12 @@ npm ci
 npm run build
 ```
 
-For a lexical-only runtime with an already-built `dist/`, optional semantic packages may be omitted:
+For a lexical-only build and runtime, optional semantic packages may be omitted entirely:
 
 ```bash
 npm ci --omit=optional
+npm run build
+npm prune --omit=dev --omit=optional
 ```
 
 Panel startup command:
@@ -234,7 +238,7 @@ Before considering a deployment healthy:
 ```text
 [ ] Node.js major version is 24
 [ ] full/semantic install: npm ci succeeds
-[ ] lexical-only install: npm ci --omit=optional starts CLI without semantic packages
+[ ] lexical-only install: npm ci --omit=optional builds and starts without semantic packages
 [ ] production dependency audit / typecheck / tests / build pass on deployed revision
 [ ] sync-sources succeeds
 [ ] rebuild-sources succeeds

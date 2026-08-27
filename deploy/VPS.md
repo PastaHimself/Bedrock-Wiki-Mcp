@@ -59,14 +59,14 @@ It performs these operations:
 3. creates the unprivileged `bedrock-mcp` service account and persistent directories;
 4. runs Git inspection/archive operations as the checkout owner rather than weakening Git `safe.directory` protection for root;
 5. stages the exact clean Git `HEAD` under `/opt`;
-6. runs reproducible `npm ci`, builds `dist/`, then prunes development and semantic optional dependencies and smoke-tests the built lexical-only runtime;
+6. runs reproducible `npm ci --omit=optional`, builds `dist/`, then prunes development dependencies and smoke-tests the built lexical-only runtime;
 7. creates `/etc/bedrock-mcp/bedrock-mcp.env` only on the first install; later runs preserve the existing production environment and secrets;
 8. before an upgrade reuses an existing `bedrock.db` only when the staged new application can open it read-only with the exact serving schema and `status --json` reports successful integrity/FTS validation;
 9. installs the hardened server/update systemd units and rebuilds the lexical index when it is missing or incompatible;
 10. enables the server and daily update timer;
 11. runs `deploy/scripts/verify-production.sh` before reporting success.
 
-The full optional dependency set exists only during the source build. The installed runtime is pruned back to lexical production dependencies, and `BEDROCK_MCP_SEMANTIC_ENABLED=false` remains mandatory for this profile.
+The semantic optional dependency set is never installed in this VPS profile, reducing download size and staged peak disk use. The installed runtime is pruned back to lexical production dependencies, and `BEDROCK_MCP_SEMANTIC_ENABLED=false` remains mandatory for this profile.
 
 The initial knowledge build can take substantially longer than the application install because it synchronizes the configured Bedrock repositories and builds the SQLite/FTS5 index.
 

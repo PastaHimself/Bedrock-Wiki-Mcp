@@ -116,10 +116,11 @@ run_source_git -C "$REPO_ROOT" archive HEAD | tar -x -C "$STAGE_DIR"
 log "installing reproducible build dependencies"
 (
   cd "$STAGE_DIR"
-  /usr/bin/npm ci
+  # Semantic search is disabled on this low-RAM VPS, so never download its
+  # optional native runtimes or model tooling during the staged build.
+  /usr/bin/npm ci --omit=optional
   /usr/bin/npm run build
-  # The production process is lexical-only on this VPS. Remove build tooling and
-  # semantic optional dependencies after dist/ has been produced.
+  # Remove build tooling after dist/ has been produced.
   /usr/bin/npm prune --omit=dev --omit=optional
   test ! -e node_modules/sqlite-vec
   test ! -e node_modules/@huggingface/transformers
