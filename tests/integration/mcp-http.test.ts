@@ -49,7 +49,7 @@ describe("Streamable HTTP MCP transport", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("mcp-session-id")).toBeNull();
-    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("cache-control")).toBe("no-cache, no-transform");
     const body = await response.text();
     expect(body).toContain("bedrock-wiki-mcp");
     expect(body).toContain("0.1.0");
