@@ -1,6 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 import { ingestLocalDirectory, type LocalIngestionOptions } from "../ingestion/local.js";
 import type { SourceDescriptor } from "../models/source.js";
+import { deriveScriptApiAliases } from "./aliases.js";
 import { IndexRepository } from "./repository.js";
 import { validateIndex, type IndexValidationReport } from "./validate.js";
 
@@ -13,6 +14,7 @@ export interface RebuildLocalIndexResult {
   documentsIndexed: number;
   chunksIndexed: number;
   identifiersIndexed: number;
+  aliasesDerived: number;
   validation: IndexValidationReport;
 }
 
@@ -37,6 +39,7 @@ export async function rebuildLocalIndex(
       identifiersIndexed += document.chunks.reduce((count, chunk) => count + new Set(chunk.identifiers).size, 0);
     }
 
+    const aliases = deriveScriptApiAliases(database);
     const validation = validateIndex(database);
     if (!validation.ok) {
       throw new Error(`Index validation failed after rebuild: ${validation.errors.join("; ")}`);
@@ -47,6 +50,7 @@ export async function rebuildLocalIndex(
       documentsIndexed: documents.length,
       chunksIndexed,
       identifiersIndexed,
+      aliasesDerived: aliases.aliasesInserted,
       validation,
     };
   } catch (error) {
