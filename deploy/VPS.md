@@ -9,12 +9,17 @@ Start from `deploy/systemd/bedrock-mcp.env.example` and keep these values unless
 ```text
 BEDROCK_MCP_HOST=127.0.0.1
 BEDROCK_MCP_PORT=8080
+BEDROCK_MCP_TRUSTED_PROXY_IPS=127.0.0.1
 BEDROCK_MCP_MAX_CONCURRENT_REQUESTS=8
 BEDROCK_MCP_SEMANTIC_ENABLED=false
 BEDROCK_MCP_INCLUDE_PREVIEW=false
 BEDROCK_MCP_BACKUP_RETAIN=3
 BEDROCK_MCP_MIN_FREE_BYTES=2147483648
 ```
+
+`BEDROCK_MCP_TRUSTED_PROXY_IPS=127.0.0.1` is specific to the documented topology where `cloudflared` connects directly to Node at `http://127.0.0.1:8080`. In that configuration the server may use Cloudflare's validated `CF-Connecting-IP` header as the per-client rate-limit key instead of treating every Tunnel request as the same loopback client.
+
+Do not copy that proxy-trust setting into an unrelated local reverse-proxy topology. The application ignores `CF-Connecting-IP` unless the immediate socket peer is explicitly allowlisted, but an allowlisted generic proxy that forwards attacker-supplied `CF-Connecting-IP` unchanged would defeat per-client rate limiting. Leave the setting empty unless the listed peer is the trusted Cloudflare Tunnel process.
 
 The application-level concurrency default remains higher for larger deployments; the systemd example deliberately overrides it for two CPU cores. Semantic packages can be omitted entirely with `npm ci --omit=optional` on this profile.
 
@@ -68,7 +73,7 @@ Cloudflare Tunnel
   Bedrock MCP
 ```
 
-Use `deploy/cloudflare/config.yml.example`. Keep port 8080 off the public firewall, keep `BEDROCK_MCP_ALLOWED_HOSTS` set to the public hostname, and expose no database, updater, backup, shell, or other administrative endpoint.
+Use `deploy/cloudflare/config.yml.example`. Keep port 8080 off the public firewall, keep `BEDROCK_MCP_ALLOWED_HOSTS` set to the public hostname, set `BEDROCK_MCP_TRUSTED_PROXY_IPS=127.0.0.1` only for this direct Tunnel-to-Node topology, and expose no database, updater, backup, shell, or other administrative endpoint.
 
 ## Operational checks
 

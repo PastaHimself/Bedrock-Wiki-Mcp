@@ -14,6 +14,7 @@ function testConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     logLevel: "error",
     allowedHosts: [],
     allowedOrigins: [],
+    trustedProxyIps: [],
     maxRequestBodySize: 524288,
     maxConcurrentRequests: 32,
     rateLimitPerMinute: 120,
@@ -88,6 +89,42 @@ describe("remote HTTP security", () => {
     expect(second.status).toBe(429);
     expect(Number(second.headers.get("retry-after"))).toBeGreaterThan(0);
     await expect(second.json()).resolves.toEqual({ error: "rate_limited" });
+  });
+
+  it("separates Cloudflare clients when the immediate proxy is trusted", async () => {
+    const base = await start(testConfig({
+      rateLimitPerMinute: 1,
+      trustedProxyIps: ["127.0.0.1"],
+    }));
+
+    const firstClient = await fetch(`${base}/mcp`, {
+      headers: { "cf-connecting-ip": "203.0.113.10" },
+    });
+    expect(firstClient.status).not.toBe(429);
+
+    const secondClient = await fetch(`${base}/mcp`, {
+      headers: { "cf-connecting-ip": "203.0.113.11" },
+    });
+    expect(secondClient.status).not.toBe(429);
+
+    const repeatedFirstClient = await fetch(`${base}/mcp`, {
+      headers: { "cf-connecting-ip": "203.0.113.10" },
+    });
+    expect(repeatedFirstClient.status).toBe(429);
+  });
+
+  it("ignores forged Cloudflare client IPs from untrusted peers", async () => {
+    const base = await start(testConfig({ rateLimitPerMinute: 1 }));
+
+    const first = await fetch(`${base}/mcp`, {
+      headers: { "cf-connecting-ip": "203.0.113.10" },
+    });
+    expect(first.status).not.toBe(429);
+
+    const forgedSecondIdentity = await fetch(`${base}/mcp`, {
+      headers: { "cf-connecting-ip": "203.0.113.11" },
+    });
+    expect(forgedSecondIdentity.status).toBe(429);
   });
 
   it("rejects oversized MCP request bodies before parsing", async () => {
