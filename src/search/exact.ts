@@ -6,6 +6,8 @@ export interface ExactIdentifierHit {
   documentId: string;
   ordinal: number;
   identifier: string;
+  matchedIdentifier: string;
+  aliasType: string;
   title: string;
   content: string;
   path: string;
@@ -32,6 +34,8 @@ interface ExactIdentifierRow {
   document_id: string;
   ordinal: number;
   identifier: string;
+  matched_identifier: string;
+  alias_type: string;
   title: string;
   content: string;
   path: string;
@@ -67,13 +71,16 @@ export function exactIdentifierSearch(
 ): ExactIdentifierHit[] {
   const normalized = normalizeIdentifier(identifier);
   if (normalized.length === 0) throw new Error("identifier must not be empty");
+  const validatedLimit = validateLimit(limit);
 
   const rows = database.prepare(`
     SELECT
       c.chunk_id,
       d.document_id,
       c.ordinal,
-      i.identifier,
+      COALESCE(c.identifier, i.identifier) AS identifier,
+      i.identifier AS matched_identifier,
+      i.alias_type,
       c.title,
       c.content,
       d.path,
@@ -114,33 +121,45 @@ export function exactIdentifierSearch(
       CASE d.channel WHEN 'stable' THEN 0 WHEN 'preview' THEN 1 ELSE 2 END,
       s.tier ASC,
       i.is_primary DESC,
+      CASE i.alias_type WHEN 'exact' THEN 0 ELSE 1 END,
       c.ordinal ASC
     LIMIT ?
-  `).all(normalized, validateLimit(limit)) as unknown as ExactIdentifierRow[];
+  `).all(normalized, Math.min(200, validatedLimit * 4)) as unknown as ExactIdentifierRow[];
 
-  return rows.map((row) => ({
-    chunkId: row.chunk_id,
-    documentId: row.document_id,
-    ordinal: row.ordinal,
-    identifier: row.identifier,
-    title: row.title,
-    content: row.content,
-    path: row.path,
-    kind: row.kind,
-    category: row.category,
-    stability: row.stability,
-    lifecycle: row.lifecycle,
-    channel: row.channel,
-    sourceId: row.source_id,
-    sourceName: row.source_name,
-    sourceTier: row.source_tier,
-    isPrimary: row.is_primary === 1,
-    ...(row.repository ? { repository: row.repository } : {}),
-    ...(row.revision ? { revision: row.revision } : {}),
-    ...(row.canonical_url ? { canonicalUrl: row.canonical_url } : {}),
-    ...(row.revision_url ? { revisionUrl: row.revision_url } : {}),
-    ...(row.api_package ? { apiPackage: row.api_package } : {}),
-    ...(row.api_version ? { apiVersion: row.api_version } : {}),
-    ...(row.minecraft_version ? { minecraftVersion: row.minecraft_version } : {}),
-  }));
+  const seenChunks = new Set<string>();
+  const results: ExactIdentifierHit[] = [];
+  for (const row of rows) {
+    if (seenChunks.has(row.chunk_id)) continue;
+    seenChunks.add(row.chunk_id);
+    results.push({
+      chunkId: row.chunk_id,
+      documentId: row.document_id,
+      ordinal: row.ordinal,
+      identifier: row.identifier,
+      matchedIdentifier: row.matched_identifier,
+      aliasType: row.alias_type,
+      title: row.title,
+      content: row.content,
+      path: row.path,
+      kind: row.kind,
+      category: row.category,
+      stability: row.stability,
+      lifecycle: row.lifecycle,
+      channel: row.channel,
+      sourceId: row.source_id,
+      sourceName: row.source_name,
+      sourceTier: row.source_tier,
+      isPrimary: row.is_primary === 1,
+      ...(row.repository ? { repository: row.repository } : {}),
+      ...(row.revision ? { revision: row.revision } : {}),
+      ...(row.canonical_url ? { canonicalUrl: row.canonical_url } : {}),
+      ...(row.revision_url ? { revisionUrl: row.revision_url } : {}),
+      ...(row.api_package ? { apiPackage: row.api_package } : {}),
+      ...(row.api_version ? { apiVersion: row.api_version } : {}),
+      ...(row.minecraft_version ? { minecraftVersion: row.minecraft_version } : {}),
+    });
+    if (results.length >= validatedLimit) break;
+  }
+
+  return results;
 }
