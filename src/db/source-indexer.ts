@@ -1,12 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, rename, rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
+import { loadSourceRegistry, sourceDescriptor, type SourceConfigEntry } from "../sources/config.js";
+import { openSourceCheckout, sourceCheckoutRoot, walkSourceCheckoutDocuments } from "../sources/checkout.js";
+import { deriveScriptApiAliases } from "./aliases.js";
 import { openDatabase } from "./connection.js";
 import { migrateDatabase } from "./migrate.js";
 import { IndexRepository } from "./repository.js";
 import { validateIndex, type IndexValidationReport } from "./validate.js";
-import { loadSourceRegistry, sourceDescriptor, type SourceConfigEntry } from "../sources/config.js";
-import { openSourceCheckout, sourceCheckoutRoot, walkSourceCheckoutDocuments } from "../sources/checkout.js";
 
 export interface SourceIndexStats {
   sourceId: string;
@@ -26,6 +27,7 @@ export interface RebuildSourcesIndexOptions {
 export interface RebuildSourcesIndexResult {
   targetPath: string;
   sources: SourceIndexStats[];
+  aliasesDerived: number;
   validation: IndexValidationReport;
 }
 
@@ -65,6 +67,7 @@ export async function rebuildConfiguredSourcesIndex(
   const buildPath = join(dirname(targetPath), `.bedrock-${randomUUID()}.building.db`);
   const database = openDatabase(buildPath);
   const stats: SourceIndexStats[] = [];
+  let aliasesDerived = 0;
   let validation: IndexValidationReport | undefined;
 
   try {
@@ -128,6 +131,15 @@ export async function rebuildConfiguredSourcesIndex(
       });
     }
 
+    database.exec("BEGIN IMMEDIATE");
+    try {
+      aliasesDerived = deriveScriptApiAliases(database).aliasesInserted;
+      database.exec("COMMIT");
+    } catch (error) {
+      if (database.isTransaction) database.exec("ROLLBACK");
+      throw error;
+    }
+
     validation = validateIndex(database);
     if (!validation.ok) throw new Error(`Index validation failed: ${validation.errors.join("; ")}`);
     database.exec("PRAGMA optimize");
@@ -151,6 +163,7 @@ export async function rebuildConfiguredSourcesIndex(
   return {
     targetPath,
     sources: stats,
+    aliasesDerived,
     validation: validation as IndexValidationReport,
   };
 }

@@ -104,6 +104,7 @@ export function registerKnowledgeTools(server: McpServer, database?: DatabaseSyn
         stabilities: z.array(stabilitySchema).max(5).optional(),
         sourceTiers: z.array(z.number().int().min(1).max(4)).max(4).optional(),
         minecraftVersion: z.string().min(1).max(50).optional(),
+        apiVersion: z.string().min(1).max(50).optional(),
         includePreview: z.boolean().optional(),
         includeHistorical: z.boolean().optional(),
         maxChars: z.number().int().min(2000).max(24000).optional(),
@@ -125,6 +126,7 @@ export function registerKnowledgeTools(server: McpServer, database?: DatabaseSyn
           ...(args.stabilities !== undefined ? { stabilities: args.stabilities } : {}),
           ...(args.sourceTiers !== undefined ? { sourceTiers: args.sourceTiers } : {}),
           ...(args.minecraftVersion !== undefined ? { minecraftVersion: args.minecraftVersion } : {}),
+          ...(args.apiVersion !== undefined ? { apiVersion: args.apiVersion } : {}),
           ...(args.includePreview !== undefined ? { includePreview: args.includePreview } : {}),
           ...(args.includeHistorical !== undefined ? { includeHistorical: args.includeHistorical } : {}),
           ...(args.maxChars !== undefined ? { maxChars: args.maxChars } : {}),
@@ -198,11 +200,12 @@ export function registerKnowledgeTools(server: McpServer, database?: DatabaseSyn
     "get_definition",
     {
       title: "Get Bedrock definition",
-      description: "Look up an exact Bedrock component or Script API identifier. Returns at most three definitions and prefers current stable material.",
+      description: "Look up an exact Bedrock component or Script API identifier. Returns at most three definitions and prefers current stable, version-compatible material.",
       annotations: READ_ONLY,
       inputSchema: z.object({
         identifier: z.string().trim().min(1).max(250),
         minecraftVersion: z.string().min(1).max(50).optional(),
+        apiVersion: z.string().min(1).max(50).optional(),
         includePreview: z.boolean().optional(),
         includeHistorical: z.boolean().optional(),
       }),
@@ -218,6 +221,7 @@ export function registerKnowledgeTools(server: McpServer, database?: DatabaseSyn
         return textResult(getDefinition(requireDatabase(database), {
           identifier: args.identifier,
           ...(args.minecraftVersion !== undefined ? { minecraftVersion: args.minecraftVersion } : {}),
+          ...(args.apiVersion !== undefined ? { apiVersion: args.apiVersion } : {}),
           ...(args.includePreview !== undefined ? { includePreview: args.includePreview } : {}),
           ...(args.includeHistorical !== undefined ? { includeHistorical: args.includeHistorical } : {}),
         }));
