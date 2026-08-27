@@ -4,7 +4,7 @@ A self-hosted, read-only Model Context Protocol knowledge server for Minecraft B
 
 ## Status
 
-Milestones 0–3 are implemented. Milestone 4 (remote HTTP hardening) is in progress on its feature branch.
+Milestones 0–4 are merged. Milestone 5 (official-source ingestion from local checkouts) is implemented on a feature branch pending final validation/merge.
 
 The current server provides:
 
@@ -17,9 +17,10 @@ The current server provides:
 - exact identifier lookup plus natural-language FTS search
 - stable/preview/historical metadata and ranking
 - controlled `doc_*` / `chk_*` fetching; no arbitrary filesystem reads
+- official Microsoft/Mojang source ingestion from local Git checkouts
 - no paid API, embedding API, or hosted vector database required
 
-Official-source synchronization is **not implemented yet**. Source definitions are already modeled, but automated cloning/updating of Microsoft/Mojang repositories belongs to Milestone 5 and later.
+Automated network synchronization (clone/fetch/pull) is intentionally not part of Milestone 5. It belongs to Milestone 7 so normal MCP serving remains read-only and source updates stay an explicit administrative operation.
 
 ## Public MCP tools
 
@@ -40,17 +41,18 @@ The server does not expose arbitrary file reads, shell commands, database writes
 - Preview and historical material are distinguishable in metadata and excluded from normal retrieval unless explicitly requested or clearly implied by the query.
 - Generated databases and source checkouts are deployment state and are not committed to Git.
 - Retrieval responses are bounded by result and character limits.
+- Official-source index rebuilds are performed into a temporary SQLite database and replace the live index only after validation succeeds.
 
 ## Configured official knowledge sources
 
-`config/sources.json` currently describes the intended official ingestion targets:
+`config/sources.json` describes the official ingestion targets:
 
-1. `MicrosoftDocs/minecraft-creator` — Creator documentation and Script API reference.
+1. `MicrosoftDocs/minecraft-creator` — Creator documents, command reference, general reference, current Script API, and prior Script API material.
 2. `Mojang/bedrock-samples` `main` — official stable behavior/resource pack samples.
-3. `Mojang/bedrock-samples` `preview` — preview samples, kept distinct from stable material.
+3. `Mojang/bedrock-samples` `preview` — preview samples, disabled by default and kept distinct from stable material.
 4. `microsoft/minecraft-samples` — official tutorial and project samples.
 
-Automated source synchronization will be implemented in Milestone 5/7. Until then, `rebuild-index` indexes local knowledge from `knowledge/local/` or a directory supplied on the command line.
+The source trust tier and release channel are preserved in the SQLite index and exposed through retrieval metadata.
 
 ## Development
 
@@ -71,13 +73,50 @@ Run checks:
 npm run check
 ```
 
-Rebuild the local index:
+### Local curated knowledge
+
+Rebuild the local Tier-3 curated index:
 
 ```bash
 npm run dev -- rebuild-index
 # or
 npm run dev -- rebuild-index /path/to/knowledge
 ```
+
+### Official source checkouts
+
+Milestone 5 expects source repositories to already exist as local Git checkouts. By default they live under:
+
+```text
+data/sources/ms_creator_docs/
+data/sources/bedrock_samples_stable/
+data/sources/bedrock_samples_preview/
+data/sources/minecraft_samples/
+```
+
+Each checkout directory name must match the source `id` in `config/sources.json`.
+
+To rebuild the official-source index from the default checkout root:
+
+```bash
+npm run dev -- rebuild-sources
+```
+
+To use a different checkout root:
+
+```bash
+npm run dev -- rebuild-sources /srv/bedrock-sources
+```
+
+Preview sources are excluded by default. Include them explicitly when building an index that should contain preview material:
+
+```bash
+npm run dev -- rebuild-sources --include-preview
+```
+
+The rebuild streams documents instead of holding the whole corpus in RAM. Files outside the configured include/exclude rules, unsupported extensions, symlinks, and oversized files are skipped. Repository revision, branch, canonical file URL, revision-pinned URL, source file hash, and source modification time are preserved as provenance when available.
+
+Source cloning/updating is not performed by `rebuild-sources`; automated synchronization is deferred to Milestone 7.
 
 Validate the SQLite/FTS index:
 
@@ -112,9 +151,10 @@ The MCP SDK handles the modern 2026 per-request HTTP protocol and retains a stat
 - optional bearer-token authentication
 - per-client fixed-window rate limiting
 - concurrent `/mcp` request cap
-- MCP request-body size limit
+- MCP request-body size limit, enforced before MCP dispatch
 - HTTP header/request timeouts
-- `Cache-Control: no-store` and `X-Content-Type-Options: nosniff`
+- `X-Content-Type-Options: nosniff`
+- application-generated JSON responses use `Cache-Control: no-store`; successful MCP responses use the pinned SDK's `Cache-Control: no-cache, no-transform`
 
 `/health` intentionally remains unauthenticated and exposes only service status/name/version.
 
@@ -127,6 +167,7 @@ TLS should terminate at a reverse proxy or tunnel; the Node process should norma
 ```text
 bedrock-mcp serve
 bedrock-mcp rebuild-index [directory]
+bedrock-mcp rebuild-sources [checkout-root] [--include-preview]
 bedrock-mcp validate-index
 bedrock-mcp version
 bedrock-mcp help

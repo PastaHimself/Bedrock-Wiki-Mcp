@@ -9,6 +9,7 @@
       "branch": "main",
       "channel": "stable",
       "include": [
+        "creator/Commands/**",
         "creator/Documents/**",
         "creator/Reference/**",
         "creator/ScriptAPI/**",

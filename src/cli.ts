@@ -6,6 +6,7 @@ import { openDatabase } from "./db/connection.js";
 import { rebuildLocalIndex } from "./db/indexer.js";
 import { getSchemaVersion, migrateDatabase } from "./db/migrate.js";
 import { SCHEMA_VERSION } from "./db/migrations/0001-initial.js";
+import { rebuildConfiguredSourcesIndex } from "./db/source-indexer.js";
 import { validateIndex } from "./db/validate.js";
 import type { SourceDescriptor } from "./models/source.js";
 import { close, createHttpServer, listen } from "./server.js";
@@ -13,11 +14,13 @@ import { close, createHttpServer, listen } from "./server.js";
 const HELP = `Bedrock Wiki MCP ${SERVICE_VERSION}
 
 Usage:
-  bedrock-mcp serve                       Start the HTTP MCP server using the existing read-only index
-  bedrock-mcp rebuild-index [directory]   Rebuild the local knowledge index
-  bedrock-mcp validate-index              Validate SQLite/index integrity
-  bedrock-mcp version                     Print the version
-  bedrock-mcp help                        Show this help
+  bedrock-mcp serve                                  Start the HTTP MCP server using the existing read-only index
+  bedrock-mcp rebuild-index [directory]              Rebuild the local curated knowledge index
+  bedrock-mcp rebuild-sources [checkout-root]        Rebuild from configured official source checkouts
+                         [--include-preview]          Include preview sources disabled by default
+  bedrock-mcp validate-index                         Validate SQLite/index integrity
+  bedrock-mcp version                                Print the version
+  bedrock-mcp help                                   Show this help
 
 Environment:
   BEDROCK_MCP_HOST                     Bind host (default: 127.0.0.1)
@@ -57,6 +60,28 @@ async function rebuildIndex(directoryArg: string | undefined): Promise<number> {
   } finally {
     database.close();
   }
+}
+
+async function rebuildSources(args: readonly string[]): Promise<number> {
+  const includePreview = args.includes("--include-preview");
+  const unknownFlags = args.filter((arg) => arg.startsWith("--") && arg !== "--include-preview");
+  if (unknownFlags.length > 0) throw new Error(`Unknown rebuild-sources option: ${unknownFlags[0]}`);
+  const positional = args.filter((arg) => !arg.startsWith("--"));
+  if (positional.length > 1) throw new Error("rebuild-sources accepts at most one checkout-root argument");
+
+  const config = loadRuntimeConfig();
+  const checkoutRoot = positional[0] ? resolve(process.cwd(), positional[0]) : undefined;
+  const result = await rebuildConfiguredSourcesIndex({
+    dataDir: config.dataDir,
+    includePreview,
+    ...(checkoutRoot ? { checkoutRoot } : {}),
+  });
+  const documents = result.sources.reduce((sum, source) => sum + source.documents, 0);
+  const chunks = result.sources.reduce((sum, source) => sum + source.chunks, 0);
+  process.stdout.write(
+    `Indexed ${result.sources.length} sources, ${documents} documents, ${chunks} chunks into ${result.targetPath}.\n`,
+  );
+  return 0;
 }
 
 function validateIndexCommand(): number {
@@ -140,6 +165,7 @@ export async function runCli(args: readonly string[] = process.argv.slice(2)): P
   }
 
   if (command === "rebuild-index") return rebuildIndex(args[1]);
+  if (command === "rebuild-sources") return rebuildSources(args.slice(1));
   if (command === "validate-index") return validateIndexCommand();
   if (command === "serve") return serve();
 
