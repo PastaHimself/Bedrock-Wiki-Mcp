@@ -3,6 +3,7 @@ import { normalizeIdentifier } from "../identifiers/normalize.js";
 import type { DocumentKind } from "../models/enums.js";
 import { exactIdentifierSearch, type ExactIdentifierHit } from "./exact.js";
 import { lexicalSearch, type LexicalSearchHit } from "./lexical.js";
+import { versionCompatibility, versionMatchScore } from "./version.js";
 
 const PREVIEW_INTENT = /\b(?:preview|beta|experimental)\b/i;
 const HISTORICAL_INTENT = /\b(?:historical|legacy|old\s+api|prior\s+api)\b/i;
@@ -21,6 +22,7 @@ export interface KnowledgeSearchOptions {
   stabilities?: string[];
   sourceTiers?: number[];
   minecraftVersion?: string;
+  apiVersion?: string;
   includePreview?: boolean;
   includeHistorical?: boolean;
   maxChars?: number;
@@ -75,6 +77,8 @@ function validateOptions(options: KnowledgeSearchOptions): { limit: number; maxC
   if ((options.kinds?.length ?? 0) > 10) throw new RangeError("kinds may contain at most 10 values");
   if ((options.categories?.length ?? 0) > 10) throw new RangeError("categories may contain at most 10 values");
   if ((options.sourceTiers?.length ?? 0) > 4) throw new RangeError("sourceTiers may contain at most 4 values");
+  if ((options.minecraftVersion?.length ?? 0) > 50) throw new RangeError("minecraftVersion may contain at most 50 characters");
+  if ((options.apiVersion?.length ?? 0) > 50) throw new RangeError("apiVersion may contain at most 50 characters");
   for (const tier of options.sourceTiers ?? []) {
     if (!Number.isSafeInteger(tier) || tier < 1 || tier > 4) throw new RangeError("sourceTiers values must be integers from 1 to 4");
   }
@@ -87,6 +91,11 @@ function metadataBonus(candidate: Pick<Candidate, "sourceTier" | "stability" | "
   score += candidate.stability === "stable" ? 3 : candidate.stability === "beta" ? 1 : candidate.stability === "experimental" ? -2 : candidate.stability === "internal" ? -4 : 0;
   score += candidate.channel === "stable" ? 2 : candidate.channel === "preview" ? -2 : 0;
   return score;
+}
+
+function requestedVersionBonus(candidate: Candidate, options: KnowledgeSearchOptions): number {
+  return versionMatchScore(options.minecraftVersion, candidate.minecraftVersion)
+    + versionMatchScore(options.apiVersion, candidate.apiVersion);
 }
 
 function fromExact(hit: ExactIdentifierHit, rank: number): Candidate {
@@ -163,7 +172,8 @@ function candidateAllowed(candidate: Candidate, options: KnowledgeSearchOptions,
   if (options.stabilities?.length && !options.stabilities.includes(candidate.stability)) return false;
   const tiers = options.sourceTiers ?? [1, 2, 3];
   if (!tiers.includes(candidate.sourceTier)) return false;
-  if (options.minecraftVersion && candidate.minecraftVersion && candidate.minecraftVersion !== options.minecraftVersion) return false;
+  if (versionCompatibility(options.minecraftVersion, candidate.minecraftVersion) === "mismatch") return false;
+  if (versionCompatibility(options.apiVersion, candidate.apiVersion) === "mismatch") return false;
   return true;
 }
 
@@ -331,6 +341,7 @@ export function searchKnowledge(database: DatabaseSync, options: KnowledgeSearch
     .filter((candidate) => candidateAllowed(candidate, options, includePreview, includeHistorical))
     .map((candidate) => {
       if (candidate.identifier && normalizeIdentifier(candidate.identifier) === normalizedQuery) candidate.score += 20;
+      candidate.score += requestedVersionBonus(candidate, options);
       return candidate;
     })
     .sort((a, b) => b.score - a.score || a.sourceTier - b.sourceTier || a.chunkId.localeCompare(b.chunkId));
