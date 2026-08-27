@@ -1,0 +1,11 @@
+[Unit]
+Description=Schedule Bedrock Wiki MCP knowledge refresh
+
+[Timer]
+OnCalendar=*-*-* 04:17:00
+Persistent=true
+RandomizedDelaySec=20m
+Unit=bedrock-mcp-update.service
+
+[Install]
+WantedBy=timers.target
