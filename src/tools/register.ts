@@ -117,7 +117,18 @@ export function registerKnowledgeTools(server: McpServer, database?: DatabaseSyn
     },
     async (args) => {
       try {
-        return textResult(searchKnowledge(requireDatabase(database), args));
+        return textResult(searchKnowledge(requireDatabase(database), {
+          query: args.query,
+          ...(args.limit !== undefined ? { limit: args.limit } : {}),
+          ...(args.kinds !== undefined ? { kinds: args.kinds } : {}),
+          ...(args.categories !== undefined ? { categories: args.categories } : {}),
+          ...(args.stabilities !== undefined ? { stabilities: args.stabilities } : {}),
+          ...(args.sourceTiers !== undefined ? { sourceTiers: args.sourceTiers } : {}),
+          ...(args.minecraftVersion !== undefined ? { minecraftVersion: args.minecraftVersion } : {}),
+          ...(args.includePreview !== undefined ? { includePreview: args.includePreview } : {}),
+          ...(args.includeHistorical !== undefined ? { includeHistorical: args.includeHistorical } : {}),
+          ...(args.maxChars !== undefined ? { maxChars: args.maxChars } : {}),
+        }));
       } catch (error) {
         return toolError(error);
       }
@@ -171,7 +182,12 @@ export function registerKnowledgeTools(server: McpServer, database?: DatabaseSyn
     },
     async (args) => {
       try {
-        return textResult(fetchKnowledge(requireDatabase(database), args));
+        return textResult(fetchKnowledge(requireDatabase(database), {
+          id: args.id,
+          ...(args.contextBefore !== undefined ? { contextBefore: args.contextBefore } : {}),
+          ...(args.contextAfter !== undefined ? { contextAfter: args.contextAfter } : {}),
+          ...(args.maxChars !== undefined ? { maxChars: args.maxChars } : {}),
+        }));
       } catch (error) {
         return toolError(error);
       }
@@ -199,7 +215,12 @@ export function registerKnowledgeTools(server: McpServer, database?: DatabaseSyn
     },
     async (args) => {
       try {
-        return textResult(getDefinition(requireDatabase(database), args));
+        return textResult(getDefinition(requireDatabase(database), {
+          identifier: args.identifier,
+          ...(args.minecraftVersion !== undefined ? { minecraftVersion: args.minecraftVersion } : {}),
+          ...(args.includePreview !== undefined ? { includePreview: args.includePreview } : {}),
+          ...(args.includeHistorical !== undefined ? { includeHistorical: args.includeHistorical } : {}),
+        }));
       } catch (error) {
         return toolError(error);
       }

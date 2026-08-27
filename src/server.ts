@@ -1,4 +1,4 @@
-import { createServer, type Server, type ServerResponse } from "node:http";
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { DatabaseSync } from "node:sqlite";
 import { toNodeHandler, type NodeIncomingMessageLike } from "@modelcontextprotocol/node";
 import { createMcpHandler } from "@modelcontextprotocol/server";
@@ -10,6 +10,17 @@ import { createBedrockMcpServer } from "./mcp.js";
 export interface HttpServerOptions {
   database?: DatabaseSync;
   config?: AppConfig;
+}
+
+interface ParsedRequestBody {
+  ok: true;
+  value?: unknown;
+}
+
+interface RequestBodyRejection {
+  ok: false;
+  statusCode: 400 | 413;
+  error: "invalid_json" | "request_too_large";
 }
 
 const handlers = new WeakMap<Server, ReturnType<typeof createMcpHandler>>();
@@ -28,6 +39,41 @@ function writeGuardRejection(response: ServerResponse, rejection: GuardRejection
   writeJson(response, rejection.statusCode, { error: rejection.error });
 }
 
+async function readBoundedJsonBody(
+  request: IncomingMessage,
+  maxBytes: number,
+): Promise<ParsedRequestBody | RequestBodyRejection> {
+  if (request.method?.toUpperCase() !== "POST") return { ok: true };
+
+  const declaredLength = request.headers["content-length"];
+  if (typeof declaredLength === "string") {
+    const parsedLength = Number(declaredLength);
+    if (Number.isFinite(parsedLength) && parsedLength > maxBytes) {
+      request.resume();
+      return { ok: false, statusCode: 413, error: "request_too_large" };
+    }
+  }
+
+  const chunks: Buffer[] = [];
+  let received = 0;
+  for await (const chunk of request) {
+    const bytes = typeof chunk === "string" ? Buffer.from(chunk) : Buffer.from(chunk as Uint8Array);
+    received += bytes.byteLength;
+    if (received > maxBytes) {
+      request.resume();
+      return { ok: false, statusCode: 413, error: "request_too_large" };
+    }
+    chunks.push(bytes);
+  }
+
+  if (received === 0) return { ok: true };
+  try {
+    return { ok: true, value: JSON.parse(Buffer.concat(chunks, received).toString("utf8")) as unknown };
+  } catch {
+    return { ok: false, statusCode: 400, error: "invalid_json" };
+  }
+}
+
 export function createHttpServer(options: HttpServerOptions = {}): Server {
   const config = options.config ?? loadConfig({ NODE_ENV: "test" });
   const guard = new HttpRequestGuard(config);
@@ -39,10 +85,7 @@ export function createHttpServer(options: HttpServerOptions = {}): Server {
       onerror: (error) => console.error("MCP transport error", error),
     },
   );
-  const nodeMcpHandler = toNodeHandler(mcpHandler, {
-    maxRequestBodySize: config.maxRequestBodySize,
-    onerror: (error) => console.error("MCP Node adapter error", error),
-  });
+  const nodeMcpHandler = toNodeHandler(mcpHandler);
 
   const server = createServer(async (request, response) => {
     const url = new URL(request.url ?? "/", "http://localhost");
@@ -66,10 +109,21 @@ export function createHttpServer(options: HttpServerOptions = {}): Server {
       try {
         response.setHeader("cache-control", "no-store");
         response.setHeader("x-content-type-options", "nosniff");
+        const parsedBody = await readBoundedJsonBody(request, config.maxRequestBodySize);
+        if (!parsedBody.ok) {
+          if (parsedBody.statusCode === 413) response.setHeader("connection", "close");
+          writeJson(response, parsedBody.statusCode, { error: parsedBody.error });
+          return;
+        }
+
         // @modelcontextprotocol/node is explicitly designed for Node IncomingMessage.
         // Its duck type and @types/node disagree under exactOptionalPropertyTypes,
         // so keep the compatibility assertion isolated at this adapter boundary.
-        await nodeMcpHandler(request as unknown as NodeIncomingMessageLike, response);
+        await nodeMcpHandler(
+          request as unknown as NodeIncomingMessageLike,
+          response,
+          parsedBody.value,
+        );
       } catch (error) {
         console.error("MCP request failed", error);
         if (!response.headersSent) {
