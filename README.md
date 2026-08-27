@@ -4,7 +4,7 @@ A self-hosted, read-only Model Context Protocol knowledge server for Minecraft B
 
 ## Status
 
-Milestones 0–7 are merged. Milestone 8 adds production deployment templates for Ubuntu/systemd, HTTPS ingress, scheduled source/index refreshes, IPv6-only VPS deployments, and Pterodactyl.
+Milestones 0–8 are merged. Milestone 9 adds optional, fully local semantic retrieval while keeping exact identifier + SQLite FTS5 search as the default low-resource path.
 
 The server currently provides:
 
@@ -18,16 +18,17 @@ The server currently provides:
 - derived Script API aliases such as `world.afterEvents.playerSpawn`
 - stable/preview/historical metadata and ranking
 - Minecraft/API version-compatible filtering and ranking
+- optional local Transformers.js + sqlite-vec semantic retrieval
 - controlled `doc_*` / `chk_*` fetching; no arbitrary filesystem reads
 - verified Microsoft/Mojang Git source ingestion
 - safe administrative source clone/fetch/fast-forward synchronization
-- no paid API, embedding API, or hosted vector database required for normal operation
+- no paid API, embedding API, or hosted vector database required
 
 ## Public MCP tools
 
-The v1 public surface intentionally stays small and read-only:
+The public surface intentionally stays small and read-only:
 
-- `search` — exact + lexical search across docs, Script API, JSON, and code
+- `search` — exact + lexical search, optionally fused with local semantic retrieval
 - `fetch` — fetch server-issued document/chunk IDs with bounded context
 - `get_definition` — exact identifier lookup with stable-first, version-aware handling
 - `list_sources` — indexed source provenance and trust tiers
@@ -45,9 +46,49 @@ world.afterEvents.playerSpawn.subscribe
 system.runInterval
 ```
 
-Stable Microsoft/Mojang material has priority over preview, historical, or community material. Preview/historical content is excluded from normal retrieval unless explicitly requested or clearly implied by the query.
+Stable Microsoft/Mojang material has priority over preview, historical, or community material. Preview/historical content is excluded from normal retrieval unless explicitly requested or clearly implied by the query. The semantic path follows the same release-channel intent rules as lexical search.
 
 Optional `minecraftVersion` and `apiVersion` constraints prefer exact provenance, allow compatible numeric prefixes, reject known mismatches, and retain unversioned material only as lower-ranked fallback evidence.
+
+### Optional semantic search
+
+Semantic retrieval is disabled by default. When enabled, the server keeps the existing exact/FTS5 candidate path and fuses it with a local cosine vector search using weighted reciprocal-rank fusion. Exact Bedrock identifiers always retain hard precedence over semantic similarity.
+
+The semantic runtime packages (`@huggingface/transformers` and `sqlite-vec`) are npm optional dependencies and are loaded lazily. A lexical-only deployment can omit them entirely:
+
+```bash
+npm ci --omit=optional
+```
+
+A semantic-enabled deployment must install the optional packages with the normal reproducible install:
+
+```bash
+npm ci
+```
+
+The semantic index is isolated at:
+
+```text
+data/index/semantic.db
+```
+
+The default embedding model is `onnx-community/all-MiniLM-L6-v2-ONNX` at 384 dimensions. Model files are cached beneath `data/models/`. The administrative build command may download/cache the model; the serving process disables remote model loading and reads only the existing cache.
+
+Build the semantic index after `bedrock.db` exists:
+
+```bash
+npm run dev -- build-semantic-index
+```
+
+Then enable hybrid retrieval:
+
+```text
+BEDROCK_MCP_SEMANTIC_ENABLED=true
+```
+
+`semantic.db` stores a fingerprint of the exact lexical/core index it was built from. The server refuses stale, wrong-model, wrong-dimension, or wrong-schema semantic databases instead of silently combining inconsistent indexes.
+
+Low-RAM deployments should leave semantic retrieval disabled and may use `npm ci --omit=optional`. The five public MCP tools and lexical behavior remain available without loading or installing the embedding model/vector runtime.
 
 ## Official sources
 
@@ -68,11 +109,17 @@ Requirements:
 - npm
 - Git on `PATH` for `sync-sources`
 
-Install and validate:
+Install and validate with semantic dependencies available:
 
 ```bash
 npm ci
 npm run check
+```
+
+For a lexical-only runtime install, use:
+
+```bash
+npm ci --omit=optional
 ```
 
 Run the development server:
@@ -109,7 +156,7 @@ A custom checkout root can be supplied as the positional argument to both source
 
 Synchronization is fail-closed: existing checkouts must have the configured origin and branch, a resolvable revision, and a clean worktree. Updates are fast-forward-only. Dirty, locally-ahead, divergent, detached, wrong-origin, wrong-branch, symlinked, or otherwise invalid checkouts are rejected rather than reset.
 
-`rebuild-sources` builds a separate SQLite database and only replaces the published index after validation succeeds.
+`rebuild-sources` builds a separate SQLite database and only replaces the published index after validation succeeds. If semantic retrieval is enabled, rebuild `semantic.db` after publishing a new lexical index; the production updater does this automatically.
 
 Local curated Tier-3 knowledge can be indexed separately:
 
@@ -126,8 +173,9 @@ See [`deploy/README.md`](deploy/README.md) for the full production guide.
 Included templates cover:
 
 - hardened Ubuntu `systemd` service
-- scheduled `sync-sources -> rebuild-sources -> validate-index` refreshes
-- post-refresh service restart so the process reopens the new SQLite inode
+- scheduled source/index refreshes
+- optional semantic-index rebuild before service restart
+- post-refresh service restart so the process reopens new SQLite inodes
 - Caddy HTTPS reverse proxy
 - public IPv6/`AAAA` deployment
 - Cloudflare Tunnel for outbound-only ingress
@@ -161,6 +209,7 @@ bedrock-mcp serve
 bedrock-mcp sync-sources [checkout-root] [--include-preview]
 bedrock-mcp rebuild-index [directory]
 bedrock-mcp rebuild-sources [checkout-root] [--include-preview]
+bedrock-mcp build-semantic-index
 bedrock-mcp validate-index
 bedrock-mcp version
 bedrock-mcp help
@@ -172,7 +221,8 @@ Synchronization and indexing commands are administrative process operations, not
 
 Generated deployment state is ignored by Git:
 
-- SQLite indexes and WAL/SHM files
+- lexical and semantic SQLite indexes and WAL/SHM files
+- cached local semantic model files
 - cloned upstream knowledge sources
 - temporary ingestion files
 - backups

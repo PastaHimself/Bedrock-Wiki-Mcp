@@ -1,10 +1,12 @@
 import type { DatabaseSync } from "node:sqlite";
 import type { McpServer } from "@modelcontextprotocol/server";
 import * as z from "zod/v4";
+import type { SemanticRetriever } from "../semantic/retriever.js";
 import { getDefinition } from "../search/definition.js";
 import { listKnowledgeCategories, listKnowledgeSources } from "../search/discovery.js";
-import { searchKnowledge } from "../search/engine.js";
+import { searchKnowledge, type KnowledgeSearchOptions } from "../search/engine.js";
 import { fetchKnowledge } from "../search/fetch.js";
+import { hybridSearchKnowledge } from "../search/hybrid.js";
 
 const READ_ONLY = {
   readOnlyHint: true,
@@ -89,12 +91,17 @@ function requireDatabase(database: DatabaseSync | undefined): DatabaseSync {
   return database;
 }
 
-export function registerKnowledgeTools(server: McpServer, database?: DatabaseSync): void {
+export function registerKnowledgeTools(
+  server: McpServer,
+  database?: DatabaseSync,
+  semantic?: SemanticRetriever,
+  semanticTopK = 40,
+): void {
   server.registerTool(
     "search",
     {
       title: "Search Bedrock knowledge",
-      description: "Search indexed Minecraft Bedrock documentation, Script API definitions, JSON, and code. Exact identifiers receive dominant relevance; preview and historical material are excluded by default.",
+      description: "Search indexed Minecraft Bedrock documentation, Script API definitions, JSON, and code. Exact identifiers receive dominant relevance; optional local semantic retrieval broadens natural-language recall.",
       annotations: READ_ONLY,
       inputSchema: z.object({
         query: z.string().trim().min(1).max(500).describe("Exact Bedrock identifier or natural-language question"),
@@ -118,7 +125,7 @@ export function registerKnowledgeTools(server: McpServer, database?: DatabaseSyn
     },
     async (args) => {
       try {
-        return textResult(searchKnowledge(requireDatabase(database), {
+        const options: KnowledgeSearchOptions = {
           query: args.query,
           ...(args.limit !== undefined ? { limit: args.limit } : {}),
           ...(args.kinds !== undefined ? { kinds: args.kinds } : {}),
@@ -130,7 +137,11 @@ export function registerKnowledgeTools(server: McpServer, database?: DatabaseSyn
           ...(args.includePreview !== undefined ? { includePreview: args.includePreview } : {}),
           ...(args.includeHistorical !== undefined ? { includeHistorical: args.includeHistorical } : {}),
           ...(args.maxChars !== undefined ? { maxChars: args.maxChars } : {}),
-        }));
+        };
+        const db = requireDatabase(database);
+        return textResult(semantic
+          ? await hybridSearchKnowledge(db, semantic, options, semanticTopK)
+          : searchKnowledge(db, options));
       } catch (error) {
         return toolError(error);
       }

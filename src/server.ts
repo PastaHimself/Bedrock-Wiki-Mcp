@@ -6,9 +6,12 @@ import { loadConfig, type AppConfig } from "./config.js";
 import { HEALTH_PATH, MCP_PATH, SERVICE_NAME, SERVICE_VERSION } from "./constants.js";
 import { HttpRequestGuard, type GuardRejection } from "./http/security.js";
 import { createBedrockMcpServer } from "./mcp.js";
+import type { SemanticRetriever } from "./semantic/retriever.js";
 
 export interface HttpServerOptions {
   database?: DatabaseSync;
+  semantic?: SemanticRetriever;
+  semanticTopK?: number;
   config?: AppConfig;
 }
 
@@ -78,7 +81,7 @@ export function createHttpServer(options: HttpServerOptions = {}): Server {
   const config = options.config ?? loadConfig({ NODE_ENV: "test" });
   const guard = new HttpRequestGuard(config);
   const mcpHandler = createMcpHandler(
-    () => createBedrockMcpServer(options.database),
+    () => createBedrockMcpServer(options.database, options.semantic, options.semanticTopK ?? config.semanticTopK),
     {
       legacy: "stateless",
       responseMode: "auto",

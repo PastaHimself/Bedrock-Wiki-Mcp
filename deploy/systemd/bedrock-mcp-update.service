@@ -15,10 +15,13 @@ Environment=BEDROCK_MCP_UPDATE_LOCK=/var/lib/bedrock-mcp/update.lock
 ExecStart=/usr/sbin/runuser -u bedrock-mcp -- /usr/bin/bash /opt/bedrock-wiki-mcp/deploy/scripts/update-knowledge.sh
 
 # A running MCP process keeps its previous SQLite inode open across the atomic
-# index rename. Restart only after the entire refresh command succeeds.
+# index rename. Restart only after lexical validation and, when enabled, the
+# semantic index rebuild both succeed.
 ExecStartPost=/usr/bin/systemctl try-restart bedrock-mcp.service
 
-TimeoutStartSec=30min
+# Full semantic embedding can be substantially slower than lexical indexing on
+# 1-2 vCPU hosts, so leave enough headroom for the optional path.
+TimeoutStartSec=2h
 UMask=0027
 
 NoNewPrivileges=true

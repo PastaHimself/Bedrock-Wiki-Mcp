@@ -3,6 +3,8 @@ import { resolve } from "node:path";
 import { loadEnvFile } from "node:process";
 import { z } from "zod/v4";
 
+const booleanStringSchema = z.enum(["true", "false"]).transform((value) => value === "true");
+
 const environmentSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   BEDROCK_MCP_HOST: z.string().trim().min(1).default("127.0.0.1"),
@@ -15,6 +17,9 @@ const environmentSchema = z.object({
   BEDROCK_MCP_MAX_REQUEST_BYTES: z.coerce.number().int().min(16_384).max(4_194_304).default(524_288),
   BEDROCK_MCP_MAX_CONCURRENT_REQUESTS: z.coerce.number().int().min(1).max(512).default(32),
   BEDROCK_MCP_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).max(10_000).default(120),
+  BEDROCK_MCP_SEMANTIC_ENABLED: booleanStringSchema.default(false),
+  BEDROCK_MCP_SEMANTIC_MODEL: z.string().trim().min(1).max(300).default("onnx-community/all-MiniLM-L6-v2-ONNX"),
+  BEDROCK_MCP_SEMANTIC_TOP_K: z.coerce.number().int().min(5).max(100).default(40),
 });
 
 export interface AppConfig {
@@ -29,6 +34,9 @@ export interface AppConfig {
   readonly maxRequestBodySize: number;
   readonly maxConcurrentRequests: number;
   readonly rateLimitPerMinute: number;
+  readonly semanticEnabled: boolean;
+  readonly semanticModel: string;
+  readonly semanticTopK: number;
 }
 
 function csvValues(value: string, normalize: (entry: string) => string = (entry) => entry): string[] {
@@ -53,6 +61,9 @@ export function loadConfig(
     maxRequestBodySize: parsed.BEDROCK_MCP_MAX_REQUEST_BYTES,
     maxConcurrentRequests: parsed.BEDROCK_MCP_MAX_CONCURRENT_REQUESTS,
     rateLimitPerMinute: parsed.BEDROCK_MCP_RATE_LIMIT_PER_MINUTE,
+    semanticEnabled: parsed.BEDROCK_MCP_SEMANTIC_ENABLED,
+    semanticModel: parsed.BEDROCK_MCP_SEMANTIC_MODEL,
+    semanticTopK: parsed.BEDROCK_MCP_SEMANTIC_TOP_K,
   };
 }
 

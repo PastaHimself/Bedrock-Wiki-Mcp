@@ -17,6 +17,9 @@ function testConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     maxRequestBodySize: 524288,
     maxConcurrentRequests: 32,
     rateLimitPerMinute: 120,
+    semanticEnabled: false,
+    semanticModel: "onnx-community/all-MiniLM-L6-v2-ONNX",
+    semanticTopK: 40,
     ...overrides,
   };
 }

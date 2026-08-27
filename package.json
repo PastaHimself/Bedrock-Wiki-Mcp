@@ -24,6 +24,16 @@
     "@modelcontextprotocol/server": "2.0.0",
     "zod": "4.4.3"
   },
+  "optionalDependencies": {
+    "@huggingface/transformers": "4.2.0",
+    "sqlite-vec": "0.1.9"
+  },
+  "overrides": {
+    "onnxruntime-node": {
+      "adm-zip": "0.6.0"
+    },
+    "sharp": "0.35.0"
+  },
   "devDependencies": {
     "@types/node": "24.11.2",
     "tsx": "4.23.12",

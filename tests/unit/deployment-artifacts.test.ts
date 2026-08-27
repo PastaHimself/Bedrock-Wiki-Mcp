@@ -17,21 +17,29 @@ describe("production deployment artifacts", () => {
     expect(unit).not.toContain("0.0.0.0");
   });
 
-  it("refreshes knowledge before restarting the server", async () => {
+  it("refreshes lexical and optional semantic knowledge before restarting the server", async () => {
     const script = await text("deploy/scripts/update-knowledge.sh");
     const sync = script.indexOf("dist/index.js sync-sources");
     const rebuild = script.indexOf("dist/index.js rebuild-sources");
     const validate = script.indexOf("dist/index.js validate-index");
+    const semantic = script.indexOf("dist/index.js build-semantic-index");
     expect(script).toContain("flock -n");
+    expect(script).toContain("BEDROCK_MCP_SEMANTIC_ENABLED");
     expect(sync).toBeGreaterThan(0);
     expect(rebuild).toBeGreaterThan(sync);
     expect(validate).toBeGreaterThan(rebuild);
+    expect(semantic).toBeGreaterThan(validate);
 
     const unit = await text("deploy/systemd/bedrock-mcp-update.service");
     expect(unit).toContain("runuser -u bedrock-mcp");
     expect(unit).toContain("update-knowledge.sh");
     expect(unit).toContain("ExecStartPost=/usr/bin/systemctl try-restart bedrock-mcp.service");
+    expect(unit).toContain("TimeoutStartSec=2h");
     expect(unit).toContain("ReadWritePaths=/var/lib/bedrock-mcp");
+
+    const environment = await text("deploy/systemd/bedrock-mcp.env.example");
+    expect(environment).toContain("BEDROCK_MCP_SEMANTIC_ENABLED=false");
+    expect(environment).toContain("BEDROCK_MCP_SEMANTIC_MODEL=onnx-community/all-MiniLM-L6-v2-ONNX");
   });
 
   it("uses a persistent but jittered systemd timer", async () => {
