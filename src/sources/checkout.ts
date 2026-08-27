@@ -51,11 +51,11 @@ export function sourceFileUrls(
   };
 }
 
-export async function openSourceCheckout(
-  checkoutRoot: string,
+export async function validateSourceCheckoutDirectory(
+  directoryArg: string,
   config: SourceConfigEntry,
 ): Promise<SourceCheckout> {
-  const directory = resolve(checkoutRoot, config.id);
+  const directory = resolve(directoryArg);
   try {
     await access(directory);
   } catch (error) {
@@ -88,6 +88,13 @@ export async function openSourceCheckout(
   }
 
   return { config, directory, revision: git.revision };
+}
+
+export async function openSourceCheckout(
+  checkoutRoot: string,
+  config: SourceConfigEntry,
+): Promise<SourceCheckout> {
+  return validateSourceCheckoutDirectory(resolve(checkoutRoot, config.id), config);
 }
 
 export async function* walkSourceCheckoutDocuments(
