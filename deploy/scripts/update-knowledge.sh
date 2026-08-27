@@ -4,6 +4,7 @@ set -euo pipefail
 APP_DIR="${BEDROCK_MCP_APP_DIR:-/opt/bedrock-wiki-mcp}"
 CHECKOUT_ROOT="${BEDROCK_MCP_CHECKOUT_ROOT:-}"
 INCLUDE_PREVIEW="${BEDROCK_MCP_INCLUDE_PREVIEW:-false}"
+SEMANTIC_ENABLED="${BEDROCK_MCP_SEMANTIC_ENABLED:-false}"
 LOCK_FILE="${BEDROCK_MCP_UPDATE_LOCK:-/var/lib/bedrock-mcp/update.lock}"
 NODE_BIN="${BEDROCK_MCP_NODE_BIN:-/usr/bin/node}"
 
@@ -39,6 +40,19 @@ case "${INCLUDE_PREVIEW,,}" in
     ;;
 esac
 
+build_semantic=false
+case "${SEMANTIC_ENABLED,,}" in
+  1|true|yes|on)
+    build_semantic=true
+    ;;
+  0|false|no|off|"")
+    ;;
+  *)
+    echo "BEDROCK_MCP_SEMANTIC_ENABLED must be true or false." >&2
+    exit 2
+    ;;
+esac
+
 root_args=()
 if [[ -n "$CHECKOUT_ROOT" ]]; then
   root_args+=("$CHECKOUT_ROOT")
@@ -50,7 +64,12 @@ echo "Synchronizing configured Bedrock knowledge sources..."
 echo "Building a validated replacement index..."
 "$NODE_BIN" dist/index.js rebuild-sources "${root_args[@]}" "${preview_args[@]}"
 
-echo "Validating published index..."
+echo "Validating published lexical index..."
 "$NODE_BIN" dist/index.js validate-index
+
+if [[ "$build_semantic" == true ]]; then
+  echo "Building semantic index for the published lexical index..."
+  "$NODE_BIN" dist/index.js build-semantic-index
+fi
 
 echo "Knowledge refresh completed successfully."

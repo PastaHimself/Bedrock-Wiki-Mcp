@@ -1,3 +1,4 @@
+import { mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { loadRuntimeConfig } from "./config.js";
@@ -10,6 +11,10 @@ import { rebuildConfiguredSourcesIndex } from "./db/source-indexer.js";
 import { validateIndex } from "./db/validate.js";
 import type { SourceDescriptor } from "./models/source.js";
 import { close, createHttpServer, listen } from "./server.js";
+import { rebuildSemanticIndex } from "./semantic/builder.js";
+import { coreSemanticFingerprint } from "./semantic/database.js";
+import { TransformersEmbedder } from "./semantic/embedder.js";
+import { openSemanticRetriever, type SqliteSemanticRetriever } from "./semantic/retriever.js";
 import { syncConfiguredSources } from "./sources/sync.js";
 
 const HELP = `Bedrock Wiki MCP ${SERVICE_VERSION}
@@ -21,6 +26,7 @@ Usage:
   bedrock-mcp rebuild-index [directory]              Rebuild the local curated knowledge index
   bedrock-mcp rebuild-sources [checkout-root]        Rebuild from configured official source checkouts
                          [--include-preview]          Include preview sources disabled by default
+  bedrock-mcp build-semantic-index                   Build optional local vector index from bedrock.db
   bedrock-mcp validate-index                         Validate SQLite/index integrity
   bedrock-mcp version                                Print the version
   bedrock-mcp help                                   Show this help
@@ -36,10 +42,21 @@ Environment:
   BEDROCK_MCP_MAX_REQUEST_BYTES        MCP request-body limit (default: 524288)
   BEDROCK_MCP_MAX_CONCURRENT_REQUESTS  Concurrent /mcp request cap (default: 32)
   BEDROCK_MCP_RATE_LIMIT_PER_MINUTE    Per-client request cap (default: 120)
+  BEDROCK_MCP_SEMANTIC_ENABLED         true | false (default: false)
+  BEDROCK_MCP_SEMANTIC_MODEL           Local Transformers.js embedding model id
+  BEDROCK_MCP_SEMANTIC_TOP_K           Semantic candidate count (default: 40)
 `;
 
 function indexPath(dataDir: string): string {
   return join(dataDir, "index", "bedrock.db");
+}
+
+function semanticIndexPath(dataDir: string): string {
+  return join(dataDir, "index", "semantic.db");
+}
+
+function semanticModelCachePath(dataDir: string): string {
+  return join(dataDir, "models");
 }
 
 function sourceCommandArguments(command: string, args: readonly string[]): { includePreview: boolean; checkoutRoot?: string } {
@@ -112,6 +129,26 @@ async function rebuildSources(args: readonly string[]): Promise<number> {
   return 0;
 }
 
+async function buildSemanticIndex(): Promise<number> {
+  const config = loadRuntimeConfig();
+  const database = openServingDatabase(indexPath(config.dataDir));
+  const cacheDir = semanticModelCachePath(config.dataDir);
+  await mkdir(cacheDir, { recursive: true });
+  try {
+    const embedder = new TransformersEmbedder(config.semanticModel, {
+      cacheDir,
+      allowRemoteModels: true,
+    });
+    const result = await rebuildSemanticIndex(database, semanticIndexPath(config.dataDir), embedder);
+    process.stdout.write(
+      `Embedded ${result.chunksEmbedded} chunks with ${result.model} (${result.dimensions} dimensions) into ${result.targetPath}.\n`,
+    );
+    return 0;
+  } finally {
+    database.close();
+  }
+}
+
 function validateIndexCommand(): number {
   const config = loadRuntimeConfig();
   const database = openDatabase(indexPath(config.dataDir));
@@ -145,16 +182,37 @@ function openServingDatabase(path: string): DatabaseSync {
 async function serve(): Promise<number> {
   const config = loadRuntimeConfig();
   const database = openServingDatabase(indexPath(config.dataDir));
-  const server = createHttpServer({ database, config });
+  let semantic: SqliteSemanticRetriever | undefined;
   try {
-    await listen(server, config);
+    if (config.semanticEnabled) {
+      const embedder = new TransformersEmbedder(config.semanticModel, {
+        cacheDir: semanticModelCachePath(config.dataDir),
+        allowRemoteModels: false,
+      });
+      await embedder.embed(["minecraft bedrock semantic startup"]);
+      semantic = openSemanticRetriever(
+        semanticIndexPath(config.dataDir),
+        embedder,
+        coreSemanticFingerprint(database),
+        config.semanticTopK,
+      );
+    }
   } catch (error) {
     database.close();
     throw error;
   }
 
+  const server = createHttpServer({ database, config, ...(semantic ? { semantic } : {}) });
+  try {
+    await listen(server, config);
+  } catch (error) {
+    semantic?.close();
+    database.close();
+    throw error;
+  }
+
   process.stdout.write(
-    `${SERVICE_NAME} listening on http://${config.host}:${config.port}${MCP_PATH}\n`,
+    `${SERVICE_NAME} listening on http://${config.host}:${config.port}${MCP_PATH}${semantic ? " with semantic search" : ""}\n`,
   );
 
   let stopping = false;
@@ -165,6 +223,7 @@ async function serve(): Promise<number> {
     try {
       await close(server);
     } finally {
+      semantic?.close();
       database.close();
     }
   };
@@ -195,6 +254,7 @@ export async function runCli(args: readonly string[] = process.argv.slice(2)): P
   if (command === "sync-sources") return syncSources(args.slice(1));
   if (command === "rebuild-index") return rebuildIndex(args[1]);
   if (command === "rebuild-sources") return rebuildSources(args.slice(1));
+  if (command === "build-semantic-index") return buildSemanticIndex();
   if (command === "validate-index") return validateIndexCommand();
   if (command === "serve") return serve();
 

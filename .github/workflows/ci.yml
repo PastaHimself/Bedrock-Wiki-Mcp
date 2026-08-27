@@ -29,6 +29,18 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Production dependency audit
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Semantic runtime dependency smoke test
+        run: |
+          node --input-type=module <<'NODE'
+          await import('onnxruntime-node');
+          const sharp = (await import('sharp')).default;
+          if (!sharp.versions.vips) throw new Error('sharp/libvips failed to load');
+          console.log(`sharp ${sharp.versions.sharp}; libvips ${sharp.versions.vips}`);
+          NODE
+
       - name: Typecheck
         run: npm run typecheck
 
@@ -53,3 +65,30 @@ jobs:
         run: |
           node dist/index.js version
           node dist/index.js help
+
+  lexical-only-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install without semantic optional dependencies
+        run: npm ci --omit=optional
+
+      - name: Verify semantic packages are omitted
+        run: |
+          test ! -e node_modules/sqlite-vec
+          test ! -e node_modules/@huggingface/transformers
+
+      - name: Lexical-only CLI smoke test
+        run: |
+          npm run dev -- version
+          npm run dev -- help

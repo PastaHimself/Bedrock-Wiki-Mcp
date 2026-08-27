@@ -1,13 +1,13 @@
 # Production deployment
 
-This directory contains deployment templates for the production milestone. The public MCP server remains read-only; source synchronization and index replacement are explicit administrative operations.
+This directory contains deployment templates for the production milestone. The public MCP server remains read-only; source synchronization and index replacement are explicit administrative operations. Optional semantic retrieval is also built administratively and remains disabled by default.
 
 ## Recommended Ubuntu layout
 
 ```text
 /opt/bedrock-wiki-mcp/          application checkout/build (root-owned)
 /etc/bedrock-mcp/               production environment configuration (root-owned)
-/var/lib/bedrock-mcp/           persistent index, source checkouts, update lock
+/var/lib/bedrock-mcp/           persistent indexes, model cache, source checkouts, update lock
 ```
 
 Recommended service identity:
@@ -24,7 +24,7 @@ sudo install -d -o root -g bedrock-mcp -m 0750 /etc/bedrock-mcp
 
 Install Node.js 24, npm, Git, `flock`/`runuser` (normally supplied by `util-linux` on Ubuntu), and your selected HTTPS ingress. The supplied systemd templates assume Node is `/usr/bin/node`; change the unit if your Node installation lives elsewhere.
 
-Clone/copy the repository to `/opt/bedrock-wiki-mcp`, then build it:
+Clone/copy the repository to `/opt/bedrock-wiki-mcp`. For a semantic-enabled host, install the full reproducible dependency set and build it:
 
 ```bash
 cd /opt/bedrock-wiki-mcp
@@ -33,7 +33,13 @@ sudo npm run check
 sudo npm run build
 ```
 
-The application directory should not be writable by `bedrock-mcp`; deployment code and persistent knowledge state are deliberately separated.
+For a lexical-only low-resource host, the Transformers.js/sqlite-vec runtime is optional and can be omitted after building a deployable revision, or in a runtime-only installation that already has `dist/`:
+
+```bash
+sudo npm ci --omit=optional
+```
+
+Do not enable `BEDROCK_MCP_SEMANTIC_ENABLED` on an installation that omitted optional dependencies. The application directory should not be writable by `bedrock-mcp`; deployment code and persistent knowledge state are deliberately separated.
 
 ## Production environment
 
@@ -52,6 +58,16 @@ At minimum, set:
 - `BEDROCK_MCP_DATA_DIR=/var/lib/bedrock-mcp`
 - `BEDROCK_MCP_ALLOWED_HOSTS` to the exact public hostname
 - `BEDROCK_MCP_BEARER_TOKEN` when the target MCP client supports bearer authentication
+
+Semantic retrieval is optional:
+
+```text
+BEDROCK_MCP_SEMANTIC_ENABLED=false
+BEDROCK_MCP_SEMANTIC_MODEL=onnx-community/all-MiniLM-L6-v2-ONNX
+BEDROCK_MCP_SEMANTIC_TOP_K=40
+```
+
+Leave it disabled on the smallest hosts. When enabled, the updater builds `/var/lib/bedrock-mcp/index/semantic.db` and caches the model under `/var/lib/bedrock-mcp/models/`. The public service loads the model from that persistent cache with remote model loading disabled.
 
 The Node service should normally bind only to `127.0.0.1:8080`. Do not expose SQLite, source-update commands, or an administrative port.
 
@@ -73,6 +89,8 @@ sudo systemctl start bedrock-mcp-update.service
 sudo systemctl status bedrock-mcp-update.service
 ```
 
+If semantic retrieval is enabled, that first updater run also downloads/caches the configured embedding model and builds the matching semantic index before the server is started.
+
 Then enable the server and scheduled refresh:
 
 ```bash
@@ -91,13 +109,15 @@ journalctl -u bedrock-mcp-update.service -n 200 --no-pager
 curl --fail --silent http://127.0.0.1:8080/health
 ```
 
-The timer runs once per day with randomized delay. Change `OnCalendar=` in the timer if a different cadence is required.
+The timer runs once per day with randomized delay. Change `OnCalendar=` in the timer if a different cadence is required. The update service allows up to two hours because full semantic embedding can be much slower than lexical indexing on 1–2 vCPU hosts.
 
 ### Why the updater restarts the server
 
-`rebuild-sources` creates and validates a separate SQLite database, closes it, then atomically renames it over the published index. This protects the live index from partial rebuilds. A process that already has the old SQLite file open continues using that old inode, so the update unit restarts `bedrock-mcp.service` only after synchronization, rebuild, and validation all succeed.
+`rebuild-sources` creates and validates a separate SQLite database, closes it, then atomically renames it over the published lexical index. This protects the live index from partial rebuilds. A process that already has the old SQLite file open continues using that old inode, so the update unit restarts `bedrock-mcp.service` only after synchronization, lexical rebuild/validation, and (when enabled) semantic rebuilding all succeed.
 
-A failed refresh leaves the currently published index and running service untouched.
+The semantic database records a fingerprint of the exact lexical chunks it was built from. A source refresh therefore intentionally makes the old semantic database stale. The updater rebuilds `semantic.db` before restart; the server also rejects a stale semantic fingerprint at startup as a second consistency guard.
+
+A failed refresh leaves the currently running service untouched. Atomic lexical/semantic build paths prevent partially written replacement databases from being published.
 
 ## HTTPS option A: public IPv6 + Caddy
 
@@ -144,11 +164,12 @@ https://bedrock-mcp.example.com/health
 
 ## Backups
 
-The authoritative knowledge sources are upstream Git repositories and the index is reproducibly generated, so the SQLite database does not need to be treated as irreplaceable data. Still, production deployments should back up at least:
+The authoritative knowledge sources are upstream Git repositories and the indexes are reproducibly generated, so the SQLite databases do not need to be treated as irreplaceable data. Still, production deployments should back up at least:
 
 - `/etc/bedrock-mcp/bedrock-mcp.env` using a secret-capable backup system
 - any deliberately curated local knowledge not recoverable from Git
-- optionally `/var/lib/bedrock-mcp/index/bedrock.db` to reduce recovery time
+- optionally `/var/lib/bedrock-mcp/index/bedrock.db` and `semantic.db` to reduce recovery time
+- optionally `/var/lib/bedrock-mcp/models/` to avoid re-downloading semantic model files during recovery
 
 Do not publish backups containing bearer tokens or other deployment secrets.
 
@@ -164,13 +185,20 @@ BEDROCK_MCP_HOST=0.0.0.0
 BEDROCK_MCP_PORT=<allocated panel port>
 BEDROCK_MCP_DATA_DIR=/home/container/data
 BEDROCK_MCP_ALLOWED_HOSTS=<public hostname>
+BEDROCK_MCP_SEMANTIC_ENABLED=false
 ```
 
-Install/build during initial setup or an install script:
+Install/build during initial setup or an install script. Use normal `npm ci` when semantic retrieval is enabled:
 
 ```bash
 npm ci
 npm run build
+```
+
+For a lexical-only runtime with an already-built `dist/`, optional semantic packages may be omitted:
+
+```bash
+npm ci --omit=optional
 ```
 
 Panel startup command:
@@ -187,9 +215,15 @@ node dist/index.js rebuild-sources
 node dist/index.js validate-index
 ```
 
-For periodic updates, use a Pterodactyl scheduled task to run the same three commands in sequence, followed by a panel restart action. The restart is required for the running process to open the newly published SQLite database.
+If semantic retrieval is enabled, build it after the lexical index:
 
-Do not run `npm ci` on every normal server restart unless the panel installation model requires it; dependencies and `dist/` should already exist on persistent storage.
+```bash
+node dist/index.js build-semantic-index
+```
+
+For periodic updates, use a Pterodactyl scheduled task to run the same source sync/rebuild/validation sequence. When semantic mode is enabled, run `build-semantic-index` after lexical validation and before the panel restart. The restart is required for the running process to open the newly published SQLite databases.
+
+Do not run `npm ci` on every normal server restart unless the panel installation model requires it; dependencies, `dist/`, and the model cache should already exist on persistent storage.
 
 TLS normally terminates outside the Pterodactyl container (panel/reverse proxy/CDN). Expose only the panel-allocated application port to that proxy.
 
@@ -199,17 +233,22 @@ Before considering a deployment healthy:
 
 ```text
 [ ] Node.js major version is 24
-[ ] npm ci / typecheck / tests / build pass on deployed revision
+[ ] full/semantic install: npm ci succeeds
+[ ] lexical-only install: npm ci --omit=optional starts CLI without semantic packages
+[ ] production dependency audit / typecheck / tests / build pass on deployed revision
 [ ] sync-sources succeeds
 [ ] rebuild-sources succeeds
 [ ] validate-index reports ok=true
+[ ] if semantic enabled: optional semantic dependencies are installed
+[ ] if semantic enabled: build-semantic-index succeeds and model cache is persistent
+[ ] if semantic enabled: server starts with remote model loading disabled
 [ ] Node binds only to intended host/port
 [ ] /health returns 200 through localhost and public HTTPS
 [ ] /mcp is reachable through HTTPS
 [ ] public hostname is present in BEDROCK_MCP_ALLOWED_HOSTS
 [ ] bearer authentication is configured when supported by the client
 [ ] update timer/scheduled task is enabled
-[ ] failed updates do not replace the current index
+[ ] failed updates do not replace the current indexes
 [ ] successful updates restart the serving process
 [ ] no database/admin port is publicly exposed
 ```

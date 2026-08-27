@@ -16,10 +16,13 @@ describe("loadConfig", () => {
       maxRequestBodySize: 524288,
       maxConcurrentRequests: 32,
       rateLimitPerMinute: 120,
+      semanticEnabled: false,
+      semanticModel: "onnx-community/all-MiniLM-L6-v2-ONNX",
+      semanticTopK: 40,
     });
   });
 
-  it("parses deployment and security overrides", () => {
+  it("parses deployment, security, and semantic overrides", () => {
     const config = loadConfig(
       {
         NODE_ENV: "production",
@@ -33,6 +36,9 @@ describe("loadConfig", () => {
         BEDROCK_MCP_MAX_REQUEST_BYTES: "262144",
         BEDROCK_MCP_MAX_CONCURRENT_REQUESTS: "12",
         BEDROCK_MCP_RATE_LIMIT_PER_MINUTE: "90",
+        BEDROCK_MCP_SEMANTIC_ENABLED: "true",
+        BEDROCK_MCP_SEMANTIC_MODEL: "example/model",
+        BEDROCK_MCP_SEMANTIC_TOP_K: "25",
       },
       "/ignored",
     );
@@ -49,6 +55,9 @@ describe("loadConfig", () => {
       maxRequestBodySize: 262144,
       maxConcurrentRequests: 12,
       rateLimitPerMinute: 90,
+      semanticEnabled: true,
+      semanticModel: "example/model",
+      semanticTopK: 25,
     });
   });
 
@@ -60,5 +69,7 @@ describe("loadConfig", () => {
     expect(() => loadConfig({ BEDROCK_MCP_BEARER_TOKEN: "too-short" })).toThrow();
     expect(() => loadConfig({ BEDROCK_MCP_MAX_REQUEST_BYTES: "100" })).toThrow();
     expect(() => loadConfig({ BEDROCK_MCP_MAX_CONCURRENT_REQUESTS: "0" })).toThrow();
+    expect(() => loadConfig({ BEDROCK_MCP_SEMANTIC_ENABLED: "yes" })).toThrow();
+    expect(() => loadConfig({ BEDROCK_MCP_SEMANTIC_TOP_K: "101" })).toThrow();
   });
 });
