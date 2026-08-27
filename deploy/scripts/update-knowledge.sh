@@ -5,6 +5,8 @@ APP_DIR="${BEDROCK_MCP_APP_DIR:-/opt/bedrock-wiki-mcp}"
 CHECKOUT_ROOT="${BEDROCK_MCP_CHECKOUT_ROOT:-}"
 INCLUDE_PREVIEW="${BEDROCK_MCP_INCLUDE_PREVIEW:-false}"
 SEMANTIC_ENABLED="${BEDROCK_MCP_SEMANTIC_ENABLED:-false}"
+DATA_DIR="${BEDROCK_MCP_DATA_DIR:-/var/lib/bedrock-mcp}"
+BACKUP_RETAIN="${BEDROCK_MCP_BACKUP_RETAIN:-7}"
 LOCK_FILE="${BEDROCK_MCP_UPDATE_LOCK:-/var/lib/bedrock-mcp/update.lock}"
 NODE_BIN="${BEDROCK_MCP_NODE_BIN:-/usr/bin/node}"
 
@@ -16,6 +18,11 @@ fi
 if [[ ! -f "$APP_DIR/dist/index.js" ]]; then
   echo "Built server entrypoint not found: $APP_DIR/dist/index.js" >&2
   exit 1
+fi
+
+if [[ ! "$BACKUP_RETAIN" =~ ^[0-9]+$ ]] || (( BACKUP_RETAIN < 1 || BACKUP_RETAIN > 365 )); then
+  echo "BEDROCK_MCP_BACKUP_RETAIN must be an integer from 1 to 365." >&2
+  exit 2
 fi
 
 mkdir -p "$(dirname "$LOCK_FILE")"
@@ -56,6 +63,13 @@ esac
 root_args=()
 if [[ -n "$CHECKOUT_ROOT" ]]; then
   root_args+=("$CHECKOUT_ROOT")
+fi
+
+if [[ -f "$DATA_DIR/index/bedrock.db" ]]; then
+  echo "Backing up the currently published index..."
+  "$NODE_BIN" dist/index.js backup "--retain=$BACKUP_RETAIN"
+else
+  echo "No existing lexical index found; skipping pre-refresh backup."
 fi
 
 echo "Synchronizing configured Bedrock knowledge sources..."

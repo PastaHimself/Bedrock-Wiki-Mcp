@@ -1,0 +1,82 @@
+{
+  "name": "Bedrock core retrieval quality",
+  "targets": {
+    "exactTop1": 0.95,
+    "naturalTop3": 0.90,
+    "usefulTop5": 0.95
+  },
+  "queries": [
+    {
+      "id": "exact-health",
+      "kind": "exact",
+      "query": "minecraft:health",
+      "relevant": [{ "identifier": "minecraft:health", "grade": 3 }]
+    },
+    {
+      "id": "exact-nearest-attackable-target",
+      "kind": "exact",
+      "query": "minecraft:behavior.nearest_attackable_target",
+      "relevant": [{ "identifier": "minecraft:behavior.nearest_attackable_target", "grade": 3 }]
+    },
+    {
+      "id": "exact-player-spawn-runtime-chain",
+      "kind": "exact",
+      "query": "world.afterEvents.playerSpawn",
+      "relevant": [{ "identifier": "WorldAfterEvents.playerSpawn", "grade": 3 }]
+    },
+    {
+      "id": "exact-player-break-event",
+      "kind": "exact",
+      "query": "PlayerBreakBlockAfterEvent",
+      "relevant": [{ "identifier": "PlayerBreakBlockAfterEvent", "grade": 3 }]
+    },
+    {
+      "id": "exact-run-interval-runtime-chain",
+      "kind": "exact",
+      "query": "system.runInterval",
+      "relevant": [{ "identifier": "System.runInterval", "grade": 3 }]
+    },
+    {
+      "id": "exact-geometry",
+      "kind": "exact",
+      "query": "minecraft:geometry",
+      "relevant": [{ "identifier": "minecraft:geometry", "grade": 3 }]
+    },
+    {
+      "id": "natural-mob-chase-player",
+      "kind": "natural",
+      "query": "make a mob chase players",
+      "relevant": [{ "identifier": "minecraft:behavior.nearest_attackable_target", "grade": 3 }]
+    },
+    {
+      "id": "natural-player-spawn",
+      "kind": "natural",
+      "query": "detect when a player spawns",
+      "relevant": [{ "identifier": "WorldAfterEvents.playerSpawn", "grade": 3 }]
+    },
+    {
+      "id": "natural-run-every-few-ticks",
+      "kind": "natural",
+      "query": "run code every few ticks",
+      "relevant": [{ "identifier": "System.runInterval", "grade": 3 }]
+    },
+    {
+      "id": "natural-more-health",
+      "kind": "natural",
+      "query": "give a mob more health so it survives longer",
+      "relevant": [{ "identifier": "minecraft:health", "grade": 3 }]
+    },
+    {
+      "id": "natural-projectile",
+      "kind": "natural",
+      "query": "make an entity shoot a custom projectile",
+      "relevant": [{ "identifier": "minecraft:projectile", "grade": 3 }]
+    },
+    {
+      "id": "natural-block-break-after-event",
+      "kind": "natural",
+      "query": "run script after a player breaks a block",
+      "relevant": [{ "identifier": "PlayerBreakBlockAfterEvent", "grade": 3 }]
+    }
+  ]
+}

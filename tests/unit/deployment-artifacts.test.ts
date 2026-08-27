@@ -17,15 +17,18 @@ describe("production deployment artifacts", () => {
     expect(unit).not.toContain("0.0.0.0");
   });
 
-  it("refreshes lexical and optional semantic knowledge before restarting the server", async () => {
+  it("backs up, refreshes lexical/semantic knowledge, then restarts the server", async () => {
     const script = await text("deploy/scripts/update-knowledge.sh");
+    const backup = script.indexOf("dist/index.js backup");
     const sync = script.indexOf("dist/index.js sync-sources");
     const rebuild = script.indexOf("dist/index.js rebuild-sources");
     const validate = script.indexOf("dist/index.js validate-index");
     const semantic = script.indexOf("dist/index.js build-semantic-index");
     expect(script).toContain("flock -n");
     expect(script).toContain("BEDROCK_MCP_SEMANTIC_ENABLED");
-    expect(sync).toBeGreaterThan(0);
+    expect(script).toContain("BEDROCK_MCP_BACKUP_RETAIN");
+    expect(backup).toBeGreaterThan(0);
+    expect(sync).toBeGreaterThan(backup);
     expect(rebuild).toBeGreaterThan(sync);
     expect(validate).toBeGreaterThan(rebuild);
     expect(semantic).toBeGreaterThan(validate);
@@ -40,6 +43,7 @@ describe("production deployment artifacts", () => {
     const environment = await text("deploy/systemd/bedrock-mcp.env.example");
     expect(environment).toContain("BEDROCK_MCP_SEMANTIC_ENABLED=false");
     expect(environment).toContain("BEDROCK_MCP_SEMANTIC_MODEL=onnx-community/all-MiniLM-L6-v2-ONNX");
+    expect(environment).toContain("BEDROCK_MCP_BACKUP_RETAIN=7");
   });
 
   it("uses a persistent but jittered systemd timer", async () => {

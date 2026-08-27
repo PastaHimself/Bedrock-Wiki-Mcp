@@ -4,7 +4,7 @@ A self-hosted, read-only Model Context Protocol knowledge server for Minecraft B
 
 ## Status
 
-Milestones 0–8 are merged. Milestone 9 adds optional, fully local semantic retrieval while keeping exact identifier + SQLite FTS5 search as the default low-resource path.
+Milestones 0–9 are merged. The original implementation roadmap is complete, including the optional local semantic-search upgrade. The repository also includes administrative quality/operations tooling for status reporting, online backups, and repeatable retrieval benchmarks.
 
 The server currently provides:
 
@@ -22,6 +22,8 @@ The server currently provides:
 - controlled `doc_*` / `chk_*` fetching; no arbitrary filesystem reads
 - verified Microsoft/Mojang Git source ingestion
 - safe administrative source clone/fetch/fast-forward synchronization
+- online SQLite backups with retention
+- measurable retrieval quality benchmarks
 - no paid API, embedding API, or hosted vector database required
 
 ## Public MCP tools
@@ -34,7 +36,7 @@ The public surface intentionally stays small and read-only:
 - `list_sources` — indexed source provenance and trust tiers
 - `list_categories` — categories currently present in the index
 
-The public MCP server does **not** expose arbitrary file reads, shell commands, database writes, source synchronization, or index-update operations.
+The public MCP server does **not** expose arbitrary file reads, shell commands, database writes, source synchronization, backup, benchmark, status administration, or index-update operations.
 
 ## Retrieval behavior
 
@@ -166,6 +168,35 @@ npm run dev -- rebuild-index
 npm run dev -- rebuild-index /path/to/knowledge
 ```
 
+## Administrative quality and operations
+
+Inspect the published index without exposing an admin HTTP endpoint:
+
+```bash
+npm run dev -- status
+npm run dev -- status --json
+```
+
+`status` reports schema/integrity state, database size, document/chunk/identifier counts, FTS consistency, and per-source revision/coverage.
+
+Create an online-consistent backup using Node's SQLite backup API:
+
+```bash
+npm run dev -- backup
+npm run dev -- backup /srv/bedrock-backups --retain=14
+```
+
+A snapshot contains `bedrock.db`, `semantic.db` when present, repository `config/`, curated `knowledge/local/`, and a manifest. Symlinks and non-regular files in copied project material are skipped. The default destination is `data/backups/` with seven retained snapshots. Production scheduled refreshes create this backup **before** source synchronization/rebuild.
+
+Run the committed retrieval-quality suite against the currently published lexical index:
+
+```bash
+npm run dev -- benchmark
+npm run dev -- benchmark --json
+```
+
+The default suite is `benchmarks/search-queries.json`. It covers core exact/runtime-chain and natural-language Bedrock queries and reports MRR, Recall@3, Recall@5, NDCG@5, exact Top-1, natural Top-3, and useful Top-5. The command exits nonzero when configured quality targets fail, so it can be used as a deployment/release gate after a real official-source index has been built.
+
 ## Production deployment
 
 See [`deploy/README.md`](deploy/README.md) for the full production guide.
@@ -174,6 +205,7 @@ Included templates cover:
 
 - hardened Ubuntu `systemd` service
 - scheduled source/index refreshes
+- pre-refresh online backups with retention
 - optional semantic-index rebuild before service restart
 - post-refresh service restart so the process reopens new SQLite inodes
 - Caddy HTTPS reverse proxy
@@ -210,12 +242,15 @@ bedrock-mcp sync-sources [checkout-root] [--include-preview]
 bedrock-mcp rebuild-index [directory]
 bedrock-mcp rebuild-sources [checkout-root] [--include-preview]
 bedrock-mcp build-semantic-index
+bedrock-mcp status [--json]
+bedrock-mcp backup [destination] [--retain=N]
+bedrock-mcp benchmark [file] [--json]
 bedrock-mcp validate-index
 bedrock-mcp version
 bedrock-mcp help
 ```
 
-Synchronization and indexing commands are administrative process operations, not public MCP tools.
+Synchronization, indexing, status, backup, and benchmark commands are administrative process operations, not public MCP tools.
 
 ## Repository data policy
 
