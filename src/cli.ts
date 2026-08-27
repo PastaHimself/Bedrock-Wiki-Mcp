@@ -20,10 +20,16 @@ Usage:
   bedrock-mcp help                        Show this help
 
 Environment:
-  BEDROCK_MCP_HOST       Bind host (default: 127.0.0.1)
-  BEDROCK_MCP_PORT       Bind port (default: 8080)
-  BEDROCK_MCP_DATA_DIR   Persistent data directory (default: ./data)
-  BEDROCK_MCP_LOG_LEVEL  debug | info | warn | error
+  BEDROCK_MCP_HOST                     Bind host (default: 127.0.0.1)
+  BEDROCK_MCP_PORT                     Bind port (default: 8080)
+  BEDROCK_MCP_DATA_DIR                 Persistent data directory (default: ./data)
+  BEDROCK_MCP_LOG_LEVEL                debug | info | warn | error
+  BEDROCK_MCP_ALLOWED_HOSTS            Comma-separated Host header allowlist
+  BEDROCK_MCP_ALLOWED_ORIGINS          Comma-separated Origin allowlist
+  BEDROCK_MCP_BEARER_TOKEN             Optional bearer token (minimum 16 characters)
+  BEDROCK_MCP_MAX_REQUEST_BYTES        MCP request-body limit (default: 524288)
+  BEDROCK_MCP_MAX_CONCURRENT_REQUESTS  Concurrent /mcp request cap (default: 32)
+  BEDROCK_MCP_RATE_LIMIT_PER_MINUTE    Per-client request cap (default: 120)
 `;
 
 function indexPath(dataDir: string): string {
@@ -86,7 +92,7 @@ function openServingDatabase(path: string): DatabaseSync {
 async function serve(): Promise<number> {
   const config = loadRuntimeConfig();
   const database = openServingDatabase(indexPath(config.dataDir));
-  const server = createHttpServer({ database });
+  const server = createHttpServer({ database, config });
   try {
     await listen(server, config);
   } catch (error) {
