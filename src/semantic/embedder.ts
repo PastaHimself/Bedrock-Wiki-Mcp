@@ -32,9 +32,13 @@ interface TransformersModule {
   ): Promise<unknown>;
 }
 
+// Keep the optional package name behind a non-literal import so TypeScript can
+// compile a lexical-only installation where the semantic dependency is absent.
+const TRANSFORMERS_PACKAGE: string = "@huggingface/transformers";
+
 async function loadTransformers(): Promise<TransformersModule> {
   try {
-    return await import("@huggingface/transformers") as unknown as TransformersModule;
+    return await import(TRANSFORMERS_PACKAGE) as unknown as TransformersModule;
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     throw new Error(`SEMANTIC_DEPENDENCY_UNAVAILABLE: @huggingface/transformers could not be loaded: ${detail}`);

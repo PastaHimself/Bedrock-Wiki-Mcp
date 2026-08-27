@@ -31,7 +31,7 @@ describe("small VPS deployment workflow", () => {
     expect(bootstrap).not.toMatch(/git\s+config[^\n]*safe\.directory/);
     expect(bootstrap).toContain("node_24.x");
     expect(bootstrap).toContain("signed-by=/etc/apt/keyrings/nodesource.gpg");
-    expect(bootstrap).toContain("/usr/bin/npm ci");
+    expect(bootstrap).toContain("/usr/bin/npm ci --omit=optional");
     expect(bootstrap).toContain("/usr/bin/npm run build");
     expect(bootstrap).toContain("/usr/bin/npm prune --omit=dev --omit=optional");
     expect(bootstrap).toContain("test ! -e node_modules/sqlite-vec");

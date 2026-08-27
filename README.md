@@ -138,7 +138,11 @@ For a lexical-only runtime install, use:
 
 ```bash
 npm ci --omit=optional
+npm run build
 ```
+
+This build path never installs the local embedding/vector stack. Run the built
+server with `node dist/index.js serve`.
 
 Run the development server:
 

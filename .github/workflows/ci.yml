@@ -90,10 +90,13 @@ jobs:
           test ! -e node_modules/sqlite-vec
           test ! -e node_modules/@huggingface/transformers
 
+      - name: Build without semantic optional dependencies
+        run: npm run build
+
       - name: Lexical-only CLI smoke test
         run: |
-          npm run dev -- version
-          npm run dev -- help
+          node dist/index.js version
+          node dist/index.js help
 
   production-lexical-runtime:
     runs-on: ubuntu-latest
@@ -109,9 +112,9 @@ jobs:
           node-version: 24
           cache: npm
 
-      - name: Build reproducible application
+      - name: Build reproducible lexical-only application
         run: |
-          npm ci
+          npm ci --omit=optional
           npm run build
 
       - name: Prune to lexical production runtime
