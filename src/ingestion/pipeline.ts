@@ -56,6 +56,7 @@ export function ingestDocument(input: IngestInput): ParsedDocument {
   } else if (classification.language === "json") {
     const parsed = parseBedrockJson(input.content, input.path);
     title = parsed.title;
+    minecraftVersion ??= parsed.minecraftVersion;
     chunks = parsed.chunks;
   } else if (classification.language === "typescript" || classification.language === "javascript") {
     chunks = parseCode(input.content, input.path);

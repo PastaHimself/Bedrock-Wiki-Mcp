@@ -1,11 +1,12 @@
 import { extractJsonIdentifiers } from "../identifiers/extract.js";
 import type { ChunkDraft } from "../models/chunk.js";
-import type { SymbolKind } from "../models/enums.js";
+import type { Lifecycle, SymbolKind } from "../models/enums.js";
 
 export interface JsonParseResult {
   title: string;
   chunks: ChunkDraft[];
   identifiers: string[];
+  minecraftVersion?: string;
 }
 
 function escapePointer(value: string): string {
@@ -20,6 +21,10 @@ function objectRecord(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
 }
 
+function inferredLifecycle(value: unknown): Lifecycle {
+  return objectRecord(value)?.deprecated === true ? "deprecated" : "active";
+}
+
 function pushChunk(
   chunks: ChunkDraft[],
   title: string,
@@ -28,6 +33,7 @@ function pushChunk(
   identifiers: string[],
   symbolKind: SymbolKind,
   contentWrapper?: unknown,
+  lifecycle: Lifecycle = "active",
 ): void {
   chunks.push({
     ordinal: chunks.length,
@@ -39,12 +45,32 @@ function pushChunk(
     endLine: 1,
     identifiers: [...new Set([...identifiers, ...extractJsonIdentifiers(value)])],
     stability: "stable",
-    lifecycle: "active",
+    lifecycle,
     language: "json",
     jsonPointer: pointer,
     ...(identifiers[0] ? { identifier: identifiers[0] } : {}),
     symbolKind,
   });
+}
+
+function schemaTitle(root: Record<string, unknown>, path: string): string | null {
+  const title = typeof root.title === "string" ? root.title.trim() : "";
+  const looksLikeSchema = typeof root.$schema === "string"
+    || typeof root.$id === "string"
+    || objectRecord(root.properties) !== null
+    || Array.isArray(root.enum);
+  if (!looksLikeSchema) return null;
+  return title || path.split("/").at(-1) || path;
+}
+
+function schemaOverview(root: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(root).filter(([key]) => key !== "properties"));
+}
+
+function propertyIdentifiers(parentTitle: string, property: string): string[] {
+  const scoped = /^[A-Za-z_$][\w$]*$/.test(property) ? `${parentTitle}.${property}` : undefined;
+  const primary = property.startsWith("minecraft:") ? property : scoped ?? property;
+  return [...new Set([primary, property, parentTitle])];
 }
 
 export function parseBedrockJson(input: string, path: string): JsonParseResult {
@@ -83,6 +109,9 @@ export function parseBedrockJson(input: string, path: string): JsonParseResult {
 
   const chunks: ChunkDraft[] = [];
   const allIdentifiers = extractJsonIdentifiers(root);
+  const minecraftVersion = typeof rootObject["x-minecraft-version"] === "string"
+    ? rootObject["x-minecraft-version"].trim()
+    : undefined;
 
   const entity = objectRecord(rootObject["minecraft:entity"]);
   if (entity) {
@@ -123,6 +152,31 @@ export function parseBedrockJson(input: string, path: string): JsonParseResult {
   }
 
   if (chunks.length === 0) {
+    const title = schemaTitle(rootObject, path);
+    if (title) {
+      const overview = schemaOverview(rootObject);
+      pushChunk(chunks, title, "", overview, [title], "unknown", overview, inferredLifecycle(rootObject));
+      const properties = objectRecord(rootObject.properties);
+      if (properties) {
+        for (const [key, value] of Object.entries(properties)) {
+          const pointer = `/properties/${escapePointer(key)}`;
+          const identifiers = propertyIdentifiers(title, key);
+          pushChunk(
+            chunks,
+            `${title} — ${key}`,
+            pointer,
+            value,
+            identifiers,
+            "property",
+            { title, property: key, schema: value },
+            inferredLifecycle(value),
+          );
+        }
+      }
+    }
+  }
+
+  if (chunks.length === 0) {
     const title = path.split("/").at(-1) ?? path;
     pushChunk(chunks, title, "", root, allIdentifiers, "unknown");
   }
@@ -131,5 +185,6 @@ export function parseBedrockJson(input: string, path: string): JsonParseResult {
     title: chunks[0]?.title ?? path,
     chunks: chunks.map((chunk, ordinal) => ({ ...chunk, ordinal, endLine: input.split(/\r?\n/).length })),
     identifiers: [...new Set([...allIdentifiers, ...chunks.flatMap((chunk) => chunk.identifiers)])],
+    ...(minecraftVersion ? { minecraftVersion } : {}),
   };
 }

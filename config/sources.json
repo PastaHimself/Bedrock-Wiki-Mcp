@@ -43,6 +43,165 @@
       "repository": "https://github.com/microsoft/minecraft-samples.git",
       "branch": "main",
       "channel": "stable"
+    },
+    {
+      "id": "minecraft_scripting_libraries",
+      "name": "Mojang Minecraft Scripting Libraries",
+      "type": "git",
+      "tier": 2,
+      "repository": "https://github.com/Mojang/minecraft-scripting-libraries.git",
+      "branch": "main",
+      "channel": "stable",
+      "include": [
+        "README.md",
+        "libraries/**"
+      ]
+    },
+    {
+      "id": "minecraft_debugger",
+      "name": "Mojang Minecraft Bedrock Debugger Documentation",
+      "type": "git",
+      "tier": 2,
+      "repository": "https://github.com/Mojang/minecraft-debugger.git",
+      "branch": "main",
+      "channel": "stable",
+      "include": [
+        "README.md"
+      ]
+    },
+    {
+      "id": "minecraft_creator_tools",
+      "name": "Mojang Minecraft Creator Tools",
+      "type": "git",
+      "tier": 3,
+      "repository": "https://github.com/Mojang/minecraft-creator-tools.git",
+      "branch": "main",
+      "channel": "stable",
+      "sparsePaths": [
+        "app/jsnode"
+      ],
+      "include": [
+        "README.md",
+        "CHANGELOG.md",
+        "ProjectStructure.md",
+        "app/jsnode/README.md"
+      ]
+    },
+    {
+      "id": "bedrock_oss_wiki",
+      "name": "Bedrock Wiki (Community)",
+      "type": "git",
+      "tier": 3,
+      "repository": "https://github.com/Bedrock-OSS/bedrock-wiki.git",
+      "branch": "wiki",
+      "channel": "stable",
+      "sparsePaths": [
+        "docs"
+      ],
+      "include": [
+        "docs/*.md",
+        "docs/*.mdx",
+        "docs/**/*.md",
+        "docs/**/*.mdx"
+      ],
+      "exclude": [
+        "docs/contribute*.md",
+        "docs/discord.md",
+        "docs/hacktoberfest.md",
+        "docs/graph-test.md"
+      ]
+    },
+    {
+      "id": "bedrock_schemas_preview",
+      "name": "Mojang Bedrock Schemas (Preview)",
+      "type": "git",
+      "tier": 1,
+      "repository": "https://github.com/Mojang/bedrock-schemas.git",
+      "branch": "main",
+      "channel": "preview",
+      "defaultEnabled": false,
+      "sparsePaths": [
+        "schemas"
+      ],
+      "include": [
+        "README.md",
+        "schemas/*.json",
+        "schemas/**/*.json"
+      ]
+    },
+    {
+      "id": "bedrock_protocol_docs_preview",
+      "name": "Mojang Bedrock Network Protocol Documentation (Preview Head)",
+      "type": "git",
+      "tier": 1,
+      "repository": "https://github.com/Mojang/bedrock-protocol-docs.git",
+      "branch": "main",
+      "channel": "preview",
+      "defaultEnabled": false,
+      "sparsePaths": [
+        "additional_docs",
+        "json"
+      ],
+      "include": [
+        "README.md",
+        "additional_docs/*.md",
+        "additional_docs/**/*.md",
+        "json/*.json",
+        "json/**/*.json"
+      ]
+    },
+    {
+      "id": "minecraft_scripting_samples_preview",
+      "name": "Microsoft Minecraft Scripting Samples (Beta APIs)",
+      "type": "git",
+      "tier": 2,
+      "repository": "https://github.com/microsoft/minecraft-scripting-samples.git",
+      "branch": "main",
+      "channel": "preview",
+      "defaultEnabled": false
+    },
+    {
+      "id": "minecraft_gametests_preview",
+      "name": "Microsoft Minecraft GameTests (Beta APIs)",
+      "type": "git",
+      "tier": 2,
+      "repository": "https://github.com/microsoft/minecraft-gametests.git",
+      "branch": "main",
+      "channel": "preview",
+      "defaultEnabled": false
+    },
+    {
+      "id": "minecraft_editor_preview",
+      "name": "Mojang Minecraft Bedrock Editor (Preview)",
+      "type": "git",
+      "tier": 2,
+      "repository": "https://github.com/Mojang/minecraft-editor.git",
+      "branch": "main",
+      "channel": "preview",
+      "defaultEnabled": false,
+      "include": [
+        "README.md"
+      ]
+    },
+    {
+      "id": "minecraft_editor_extension_samples_preview",
+      "name": "Mojang Minecraft Editor Extension Samples (Preview)",
+      "type": "git",
+      "tier": 2,
+      "repository": "https://github.com/Mojang/minecraft-editor-extension-samples.git",
+      "branch": "main",
+      "channel": "preview",
+      "defaultEnabled": false
+    },
+    {
+      "id": "minecraft_editor_extension_starter_preview",
+      "name": "Mojang Minecraft Editor Extension Starter Kit (Preview)",
+      "type": "git",
+      "tier": 2,
+      "repository": "https://github.com/Mojang/minecraft-editor-extension-starter-kit.git",
+      "branch": "main",
+      "channel": "preview",
+      "defaultEnabled": false
     }
   ]
 }

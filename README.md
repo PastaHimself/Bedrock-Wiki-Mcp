@@ -20,7 +20,7 @@ The server currently provides:
 - Minecraft/API version-compatible filtering and ranking
 - optional local Transformers.js + sqlite-vec semantic retrieval
 - controlled `doc_*` / `chk_*` fetching; no arbitrary filesystem reads
-- verified Microsoft/Mojang Git source ingestion
+- verified Microsoft/Mojang Git source ingestion plus lower-ranked community knowledge
 - safe administrative source clone/fetch/fast-forward synchronization
 - online SQLite backups with retention
 - measurable retrieval quality benchmarks
@@ -92,14 +92,30 @@ BEDROCK_MCP_SEMANTIC_ENABLED=true
 
 Low-RAM deployments should leave semantic retrieval disabled and may use `npm ci --omit=optional`. The five public MCP tools and lexical behavior remain available without loading or installing the embedding model/vector runtime.
 
-## Official sources
+## Knowledge sources
 
-`config/sources.json` defines the official ingestion targets:
+`config/sources.json` defines the upstream ingestion targets and their trust/release boundaries.
 
-1. `MicrosoftDocs/minecraft-creator` — Creator docs, commands, references, current Script API, and prior Script API.
-2. `Mojang/bedrock-samples` `main` — stable behavior/resource pack samples.
-3. `Mojang/bedrock-samples` `preview` — preview samples, disabled by default.
-4. `microsoft/minecraft-samples` — official tutorials and projects.
+Stable/default-enabled sources:
+
+1. `MicrosoftDocs/minecraft-creator` — Tier 1 Creator docs, commands, references, current Script API, and prior Script API.
+2. `Mojang/bedrock-samples` `main` — Tier 2 stable behavior/resource pack samples.
+3. `microsoft/minecraft-samples` — Tier 2 official tutorials and projects.
+4. `Mojang/minecraft-scripting-libraries` — Tier 2 official reusable scripting libraries and examples.
+5. `Mojang/minecraft-debugger` — Tier 2 Bedrock scripting/BDS debugger and diagnostics documentation.
+6. `Mojang/minecraft-creator-tools` — Tier 3 targeted Creator Tools documentation.
+7. `Bedrock-OSS/bedrock-wiki` `wiki` — Tier 3 community documentation. Sparse checkout selects its `docs/` knowledge subtree (Git cone mode may retain repository-root files), and only Markdown knowledge is indexed, so community material cannot outrank higher-tier official material on equal lifecycle/channel evidence.
+
+Preview-only sources are selected only with `--include-preview` / `BEDROCK_MCP_INCLUDE_PREVIEW=true`:
+
+- `Mojang/bedrock-samples` `preview`.
+- `Mojang/bedrock-schemas` `main` — machine-readable Behavior Pack/Resource Pack JSON Schemas. The upstream head is currently preview-oriented, so it is not treated as stable.
+- `Mojang/bedrock-protocol-docs` `main` — current packet/type/enum metadata and protocol guides. The current Git head is preview-oriented; versioned GitHub Release assets are not silently treated as the stable worktree.
+- `microsoft/minecraft-scripting-samples` — Beta Script API examples.
+- `microsoft/minecraft-gametests` — Beta GameTest examples.
+- `Mojang/minecraft-editor`, `Mojang/minecraft-editor-extension-samples`, and `Mojang/minecraft-editor-extension-starter-kit` — Editor/extension material, which is Preview-specific upstream.
+
+JSON Schema ingestion creates individual definition chunks for schema properties such as `minecraft:collision_box`. Protocol-style JSON Schemas also expose packet/type names and scoped properties as exact identifiers and preserve `x-minecraft-version` metadata for version-aware retrieval.
 
 Source trust tier, release channel, repository, branch, revision, canonical URL, revision URL, and hashes are preserved as provenance where available.
 
@@ -157,6 +173,8 @@ npm run dev -- rebuild-sources --include-preview
 A custom checkout root can be supplied as the positional argument to both source commands.
 
 Synchronization is fail-closed: existing checkouts must have the configured origin and branch, a resolvable revision, and a clean worktree. Updates are fast-forward-only. Dirty, locally-ahead, divergent, detached, wrong-origin, wrong-branch, symlinked, or otherwise invalid checkouts are rejected rather than reset.
+
+New clones use blobless single-branch partial clones. Whole-repository sources keep their normal worktree. `sparsePaths` is opt-in per source and is used only where the registry explicitly identifies a safe documentation/schema subtree, such as `Bedrock-OSS/bedrock-wiki` `docs/`; it is not applied globally to Bedrock Samples.
 
 `rebuild-sources` builds a separate SQLite database and only replaces the published index after validation succeeds. If semantic retrieval is enabled, rebuild `semantic.db` after publishing a new lexical index; the production updater does this automatically.
 
