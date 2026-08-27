@@ -36,11 +36,13 @@ export function createHttpServer(options: HttpServerOptions = {}): Server {
     {
       legacy: "stateless",
       responseMode: "auto",
-      maxRequestBodySize: config.maxRequestBodySize,
       onerror: (error) => console.error("MCP transport error", error),
     },
   );
-  const nodeMcpHandler = toNodeHandler(mcpHandler);
+  const nodeMcpHandler = toNodeHandler(mcpHandler, {
+    maxRequestBodySize: config.maxRequestBodySize,
+    onerror: (error) => console.error("MCP Node adapter error", error),
+  });
 
   const server = createServer(async (request, response) => {
     const url = new URL(request.url ?? "/", "http://localhost");
