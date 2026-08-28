@@ -37,11 +37,21 @@ describe("production deployment artifacts", () => {
     expect(semantic).toBeGreaterThan(validate);
 
     const unit = await text("deploy/systemd/bedrock-mcp-update.service");
-    expect(unit).toContain("runuser -u bedrock-mcp");
-    expect(unit).toContain("update-knowledge.sh");
+    const execStarts = unit.split("\n").filter((line) => line.startsWith("ExecStart="));
+    expect(execStarts).toEqual([
+      "ExecStart=/usr/sbin/runuser -u bedrock-mcp -- /usr/bin/bash /opt/bedrock-wiki-mcp/deploy/scripts/update-knowledge.sh",
+    ]);
     expect(unit).toContain("ExecStartPost=/usr/bin/systemctl try-restart bedrock-mcp.service");
     expect(unit).toContain("TimeoutStartSec=2h");
-    expect(unit).toContain("ReadWritePaths=/var/lib/bedrock-mcp");
+    expect(unit.split("\n").filter((line) => line.startsWith("NoNewPrivileges="))).toEqual([
+      "NoNewPrivileges=true",
+    ]);
+    expect(unit.split("\n").filter((line) => line.startsWith("ProtectSystem="))).toEqual([
+      "ProtectSystem=strict",
+    ]);
+    expect(unit.split("\n").filter((line) => line.startsWith("ReadWritePaths="))).toEqual([
+      "ReadWritePaths=/var/lib/bedrock-mcp",
+    ]);
 
     const environment = await text("deploy/systemd/bedrock-mcp.env.example");
     expect(environment).toContain("BEDROCK_MCP_TRUSTED_PROXY_IPS=");

@@ -35,8 +35,20 @@ read_env_value() {
 }
 
 [[ "${EUID}" -eq 0 ]] || fail "run this script as root (sudo)"
+[[ ! -L "$(dirname -- "$CONFIG_FILE")" ]] || \
+  fail "refusing symlinked configuration directory: $(dirname -- "$CONFIG_FILE")"
+[[ ! -L "$CONFIG_FILE" ]] || fail "refusing symlinked environment file: $CONFIG_FILE"
+[[ -f "$CONFIG_FILE" ]] || fail "environment path is not a regular file: $CONFIG_FILE"
 [[ -r "$CONFIG_FILE" ]] || fail "cannot read $CONFIG_FILE"
 [[ -x /usr/bin/node ]] || fail "/usr/bin/node is missing"
+
+CONFIG_MODE="$(stat -c '%U:%G:%a' "$(dirname -- "$CONFIG_FILE")")"
+ENV_MODE="$(stat -c '%U:%G:%a' "$CONFIG_FILE")"
+[[ "$CONFIG_MODE" == "root:$SERVICE_USER:750" ]] || \
+  fail "$(dirname -- "$CONFIG_FILE") must be root:$SERVICE_USER mode 0750; found $CONFIG_MODE"
+[[ "$ENV_MODE" == "root:$SERVICE_USER:640" ]] || \
+  fail "$CONFIG_FILE must be root:$SERVICE_USER mode 0640; found $ENV_MODE"
+pass "production environment file ownership and permissions are protected"
 
 NODE_MAJOR="$(/usr/bin/node --version | sed -E 's/^v([0-9]+).*/\1/')"
 [[ "$NODE_MAJOR" == "24" ]] || fail "Node.js 24 is required; found $(/usr/bin/node --version)"
@@ -65,6 +77,37 @@ PRIMARY_HOST="${PRIMARY_HOST%"${PRIMARY_HOST##*[![:space:]]}"}"
 [[ "$SEMANTIC_ENABLED" == "false" ]] || fail "small-VPS verification requires semantic retrieval to remain disabled"
 [[ "$MIN_FREE_BYTES" =~ ^[0-9]+$ ]] || fail "BEDROCK_MCP_MIN_FREE_BYTES must be an integer"
 pass "deployment environment matches the lexical-only loopback profile"
+
+UPDATER_SCRIPT="$APP_DIR/deploy/scripts/update-knowledge.sh"
+[[ -x "$UPDATER_SCRIPT" ]] || fail "updater script is not executable: $UPDATER_SCRIPT"
+if find "$APP_DIR" \( ! -user root -o ! -group root \) -print -quit | grep -q .; then
+  fail "$APP_DIR contains paths that are not owned by root:root"
+fi
+if find "$APP_DIR" \( -type d -o -type f \) -perm /022 -print -quit | grep -q .; then
+  fail "$APP_DIR contains group- or other-writable paths"
+fi
+runuser -u "$SERVICE_USER" -- /usr/bin/test -x "$APP_DIR" || \
+  fail "$SERVICE_USER cannot traverse $APP_DIR"
+runuser -u "$SERVICE_USER" -- /usr/bin/test -r "$APP_DIR/dist/index.js" || \
+  fail "$SERVICE_USER cannot read the application entry point"
+runuser -u "$SERVICE_USER" -- /usr/bin/test -r "$UPDATER_SCRIPT" || \
+  fail "$SERVICE_USER cannot read the updater script"
+runuser -u "$SERVICE_USER" -- /usr/bin/test -x "$UPDATER_SCRIPT" || \
+  fail "$SERVICE_USER cannot execute the updater script"
+if runuser -u "$SERVICE_USER" -- /usr/bin/test -w "$APP_DIR"; then
+  fail "$SERVICE_USER can modify $APP_DIR"
+fi
+INACCESSIBLE_PATH="$(runuser -u "$SERVICE_USER" -- /usr/bin/find "$APP_DIR" \
+  \( -type d ! -executable -o -type f ! -readable \) -print -quit)" || \
+  fail "could not inspect application readability as $SERVICE_USER"
+[[ -z "$INACCESSIBLE_PATH" ]] || \
+  fail "$SERVICE_USER cannot read or traverse application path: $INACCESSIBLE_PATH"
+WRITABLE_PATH="$(runuser -u "$SERVICE_USER" -- /usr/bin/find "$APP_DIR" \
+  \( -type d -o -type f \) -writable -print -quit)" || \
+  fail "could not inspect application writability as $SERVICE_USER"
+[[ -z "$WRITABLE_PATH" ]] || \
+  fail "$SERVICE_USER can modify application path: $WRITABLE_PATH"
+pass "application tree is root-owned, service-readable, and not service-writable"
 
 systemctl is-active --quiet bedrock-mcp.service || fail "bedrock-mcp.service is not active"
 systemctl is-enabled --quiet bedrock-mcp.service || fail "bedrock-mcp.service is not enabled"
