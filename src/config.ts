@@ -38,7 +38,8 @@ export interface AppConfig {
   readonly maxRequestBodySize: number;
   readonly maxConcurrentRequests: number;
   readonly rateLimitPerMinute: number;
-  readonly includePreview: boolean;
+  /** Optional for backwards-compatible programmatic AppConfig fixtures; loadConfig always populates it. */
+  readonly includePreview?: boolean;
   readonly semanticEnabled: boolean;
   readonly semanticModel: string;
   readonly semanticTopK: number;
