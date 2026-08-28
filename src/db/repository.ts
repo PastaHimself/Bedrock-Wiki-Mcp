@@ -24,7 +24,7 @@ export class IndexRepository {
   }
 
   upsertSource(source: SourceDescriptor): void {
-    const sourceType = source.repository ? "git" : "local";
+    const sourceType = source.sourceType ?? (source.repository ? "git" : "local");
     this.#database.prepare(`
       INSERT INTO sources(id, name, source_type, tier, repository, branch, channel, current_revision, config_json)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
