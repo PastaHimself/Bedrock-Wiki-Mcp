@@ -2,6 +2,8 @@
 
 A self-hosted, read-only Model Context Protocol knowledge server for Minecraft Bedrock Edition add-on development.
 
+FRE USE: https://bedrockmcpwiki.servegame.net/mcp
+
 ## Status
 
 Milestones 0–9 are merged. The original implementation roadmap is complete, including the optional local semantic-search upgrade. The repository also includes administrative quality/operations tooling for status reporting, online backups, and repeatable retrieval benchmarks.
