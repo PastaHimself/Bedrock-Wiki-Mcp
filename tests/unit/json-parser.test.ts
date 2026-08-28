@@ -55,6 +55,19 @@ describe("Bedrock JSON parser", () => {
     expect(parsed.chunks.some((chunk) => chunk.identifier === "minecraft:health")).toBe(true);
   });
 
+  it("accepts UTF-8 BOM used by Mojang Bedrock sample JSON", () => {
+    const parsed = parseBedrockJson(`\uFEFF{
+      "format_version": "1.21.30",
+      "minecraft:texture_set": {
+        "color": "acacia_trapdoor",
+        "metalness_emissive_roughness_subsurface": "acacia_trapdoor_mers"
+      }
+    }`, "resource_pack/textures/blocks/acacia_trapdoor.texture_set.json");
+
+    expect(parsed.title).toBe("acacia_trapdoor.texture_set.json");
+    expect(parsed.chunks[0]?.content).toContain("acacia_trapdoor_mers");
+  });
+
   it("still rejects genuinely malformed JSON after JSONC normalization", () => {
     expect(() => parseBedrockJson(
       `{"minecraft:entity":{"description":{"identifier":"example:broken"} "components":{}}}`,

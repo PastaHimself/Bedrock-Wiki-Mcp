@@ -131,11 +131,16 @@ function stripTrailingCommas(input: string): string {
   return output;
 }
 
+function stripUtf8Bom(input: string): string {
+  return input.charCodeAt(0) === 0xfeff ? input.slice(1) : input;
+}
+
 function parseJsonOrJsonc(input: string, path: string): unknown {
+  const normalizedInput = stripUtf8Bom(input);
   try {
-    return JSON.parse(input) as unknown;
+    return JSON.parse(normalizedInput) as unknown;
   } catch {
-    const jsonc = stripTrailingCommas(stripJsonComments(input));
+    const jsonc = stripTrailingCommas(stripJsonComments(normalizedInput));
     try {
       return JSON.parse(jsonc) as unknown;
     } catch (error) {
