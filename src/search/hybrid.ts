@@ -1,12 +1,14 @@
 import type { DatabaseSync } from "node:sqlite";
-import type { DocumentKind } from "../models/enums.js";
 import type { SemanticRetriever } from "../semantic/retriever.js";
-import { searchKnowledge, type KnowledgeSearchOptions, type KnowledgeSearchResponse, type KnowledgeSearchResult } from "./engine.js";
-import { versionCompatibility } from "./version.js";
+import {
+  knowledgeCandidateAllowed,
+  searchKnowledge,
+  type KnowledgeSearchOptions,
+  type KnowledgeSearchResponse,
+  type KnowledgeSearchResult,
+} from "./engine.js";
+import { detectBedrockQueryIntent, type BedrockQueryIntent } from "./intent.js";
 
-const IDENTIFIER_LIKE = /(?:minecraft:|@minecraft\/|[._][A-Za-z_$]|[A-Z][a-z]+[A-Z]|\b[A-Za-z_$]+\.[A-Za-z_$]+)/;
-const PREVIEW_INTENT = /\b(?:preview|beta|experimental)\b/i;
-const HISTORICAL_INTENT = /\b(?:historical|legacy|old\s+api|prior\s+api)\b/i;
 const RRF_K = 60;
 
 interface SemanticCandidateRow {
@@ -23,6 +25,7 @@ interface SemanticCandidateRow {
   channel: string;
   source_id: string;
   source_name: string;
+  source_type: string;
   source_tier: number;
   repository: string | null;
   revision: string | null;
@@ -34,17 +37,19 @@ interface SemanticCandidateRow {
 }
 
 function allowed(row: SemanticCandidateRow, options: KnowledgeSearchOptions): boolean {
-  const includePreview = options.includePreview ?? PREVIEW_INTENT.test(options.query);
-  const includeHistorical = options.includeHistorical ?? HISTORICAL_INTENT.test(options.query);
-  if (!includePreview && (row.channel === "preview" || ["beta", "experimental", "internal"].includes(row.stability))) return false;
-  if (!includeHistorical && ["historical", "removed"].includes(row.lifecycle)) return false;
-  if (options.kinds?.length && !options.kinds.includes(row.kind as DocumentKind)) return false;
-  if (options.categories?.length && !options.categories.includes(row.category)) return false;
-  if (options.stabilities?.length && !options.stabilities.includes(row.stability)) return false;
-  if (!(options.sourceTiers ?? [1, 2, 3]).includes(row.source_tier)) return false;
-  if (versionCompatibility(options.minecraftVersion, row.minecraft_version ?? undefined) === "mismatch") return false;
-  if (versionCompatibility(options.apiVersion, row.api_version ?? undefined) === "mismatch") return false;
-  return true;
+  return knowledgeCandidateAllowed({
+    kind: row.kind,
+    category: row.category,
+    stability: row.stability,
+    lifecycle: row.lifecycle,
+    channel: row.channel,
+    sourceId: row.source_id,
+    sourceTier: row.source_tier,
+    path: row.path,
+    ...(row.api_package ? { apiPackage: row.api_package } : {}),
+    ...(row.api_version ? { apiVersion: row.api_version } : {}),
+    ...(row.minecraft_version ? { minecraftVersion: row.minecraft_version } : {}),
+  }, options);
 }
 
 function excerpt(content: string, maxChars = 1_600): string {
@@ -67,6 +72,7 @@ function loadSemanticCandidate(database: DatabaseSync, chunkId: string): Semanti
       d.channel,
       s.id AS source_id,
       s.name AS source_name,
+      s.source_type AS source_type,
       s.tier AS source_tier,
       d.repository,
       d.revision,
@@ -97,6 +103,7 @@ function publicSemanticResult(row: SemanticCandidateRow): KnowledgeSearchResult 
     channel: row.channel,
     sourceId: row.source_id,
     sourceName: row.source_name,
+    sourceType: row.source_type,
     sourceTier: row.source_tier,
     score: 0,
     exactMatch: false,
@@ -108,6 +115,17 @@ function publicSemanticResult(row: SemanticCandidateRow): KnowledgeSearchResult 
     ...(row.api_version ? { apiVersion: row.api_version } : {}),
     ...(row.minecraft_version ? { minecraftVersion: row.minecraft_version } : {}),
   };
+}
+
+function semanticIntentBonus(row: SemanticCandidateRow, intent: BedrockQueryIntent): number {
+  let bonus = 0;
+  if (intent.module && row.api_package?.toLocaleLowerCase("en-US") === intent.module) bonus += 0.0035;
+  if (intent.version && row.source_type === "npm") bonus += 0.0035;
+  if (intent.preview && row.channel === "preview") bonus += 0.0025;
+  if (intent.stable && row.channel === "stable") bonus += 0.0025;
+  if (intent.example && ["example", "code"].includes(row.kind)) bonus += 0.0015;
+  if (intent.debugging && ["schemas", "debugging"].includes(row.category)) bonus += 0.0015;
+  return bonus;
 }
 
 export async function hybridSearchKnowledge(
@@ -126,9 +144,9 @@ export async function hybridSearchKnowledge(
     return searchKnowledge(database, options);
   }
 
-  const identifierLike = IDENTIFIER_LIKE.test(options.query);
-  const lexicalWeight = identifierLike ? 0.9 : 0.55;
-  const semanticWeight = identifierLike ? 0.1 : 0.45;
+  const intent = detectBedrockQueryIntent(options.query);
+  const lexicalWeight = intent.identifierLike ? 0.9 : intent.example ? 0.62 : 0.55;
+  const semanticWeight = intent.identifierLike ? 0.1 : intent.example ? 0.38 : 0.45;
   const fused = new Map<string, { result: KnowledgeSearchResult; score: number }>();
 
   lexical.results.forEach((result, index) => {
@@ -140,14 +158,17 @@ export async function hybridSearchKnowledge(
 
   semanticHits.forEach((hit, index) => {
     const existing = fused.get(hit.chunkId);
-    const semanticScore = semanticWeight / (RRF_K + index + 1);
+    const baseSemanticScore = semanticWeight / (RRF_K + index + 1);
     if (existing) {
-      existing.score += semanticScore;
+      existing.score += baseSemanticScore;
       return;
     }
     const row = loadSemanticCandidate(database, hit.chunkId);
     if (!row || !allowed(row, options)) return;
-    fused.set(hit.chunkId, { result: publicSemanticResult(row), score: semanticScore });
+    fused.set(hit.chunkId, {
+      result: publicSemanticResult(row),
+      score: baseSemanticScore + semanticIntentBonus(row, intent),
+    });
   });
 
   const ranked = [...fused.values()]
