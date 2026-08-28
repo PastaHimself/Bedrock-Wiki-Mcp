@@ -107,6 +107,7 @@ if ! getent passwd "$SERVICE_USER" >/dev/null; then
 fi
 
 install -d -o "$SERVICE_USER" -g "$SERVICE_USER" -m 0750 "$DATA_DIR"
+[[ ! -L "$CONFIG_DIR" ]] || fail "refusing symlinked configuration directory: $CONFIG_DIR"
 install -d -o root -g "$SERVICE_USER" -m 0750 "$CONFIG_DIR"
 install -d -o root -g root -m 0755 "$(dirname -- "$APP_DIR")"
 
@@ -127,9 +128,15 @@ log "installing reproducible build dependencies"
   /usr/bin/node dist/index.js version >/dev/null
   /usr/bin/node dist/index.js help >/dev/null
 )
-chmod 0755 "$STAGE_DIR/deploy/scripts/update-knowledge.sh"
-chmod 0755 "$STAGE_DIR/deploy/scripts/verify-production.sh"
 
+# mktemp creates the staging root as 0700. Apply the final root-owned,
+# service-readable permission model before any compatibility check runs as the
+# unprivileged service account.
+/usr/bin/bash "$STAGE_DIR/deploy/scripts/set-application-permissions.sh" \
+  "$STAGE_DIR" "$SERVICE_USER"
+
+[[ ! -L "$CONFIG_DIR/bedrock-mcp.env" ]] || \
+  fail "refusing symlinked environment file: $CONFIG_DIR/bedrock-mcp.env"
 if [[ ! -f "$CONFIG_DIR/bedrock-mcp.env" ]]; then
   [[ -n "$PUBLIC_HOSTNAME" ]] || \
     fail "set BEDROCK_MCP_PUBLIC_HOSTNAME for the initial deployment"
@@ -153,6 +160,10 @@ if [[ ! -f "$CONFIG_DIR/bedrock-mcp.env" ]]; then
   install -o root -g "$SERVICE_USER" -m 0640 "$ENV_TMP" "$CONFIG_DIR/bedrock-mcp.env"
   rm -f -- "$ENV_TMP"
 else
+  [[ -f "$CONFIG_DIR/bedrock-mcp.env" ]] || \
+    fail "existing environment path is not a regular file: $CONFIG_DIR/bedrock-mcp.env"
+  chown root:"$SERVICE_USER" "$CONFIG_DIR/bedrock-mcp.env"
+  chmod 0640 "$CONFIG_DIR/bedrock-mcp.env"
   log "preserving existing $CONFIG_DIR/bedrock-mcp.env"
 fi
 
@@ -185,8 +196,10 @@ if [[ -d "$APP_DIR" ]]; then
 fi
 mv -- "$STAGE_DIR" "$APP_DIR"
 STAGE_DIR=""
-chown -R root:root "$APP_DIR"
-chmod -R go-w "$APP_DIR"
+# Reapply after the swap so upgrades also repair trees installed by bootstrap
+# versions that preserved mktemp's non-traversable 0700 root mode.
+/usr/bin/bash "$APP_DIR/deploy/scripts/set-application-permissions.sh" \
+  "$APP_DIR" "$SERVICE_USER"
 
 install -m 0644 "$APP_DIR/deploy/systemd/bedrock-mcp.service" /etc/systemd/system/bedrock-mcp.service
 install -m 0644 "$APP_DIR/deploy/systemd/bedrock-mcp-update.service" /etc/systemd/system/bedrock-mcp-update.service
