@@ -17,6 +17,7 @@ const READ_ONLY = {
 
 const kindSchema = z.enum(["docs", "api", "component", "json", "code", "example", "reference"]);
 const stabilitySchema = z.enum(["stable", "beta", "experimental", "internal", "unknown"]);
+const channelSchema = z.enum(["stable", "preview", "unknown"]);
 
 const provenanceShape = {
   repository: z.string().optional(),
@@ -42,6 +43,7 @@ const searchResultSchema = z.object({
   channel: z.string(),
   sourceId: z.string(),
   sourceName: z.string(),
+  sourceType: z.string(),
   sourceTier: z.number().int(),
   score: z.number(),
   exactMatch: z.boolean(),
@@ -101,15 +103,19 @@ export function registerKnowledgeTools(
     "search",
     {
       title: "Search Bedrock knowledge",
-      description: "Search indexed Minecraft Bedrock documentation, Script API definitions, JSON, and code. Exact identifiers receive dominant relevance; optional local semantic retrieval broadens natural-language recall.",
+      description: "Search indexed Minecraft Bedrock documentation, Script API definitions, JSON, code, and official module metadata. Exact identifiers receive dominant relevance; developer intent, stable/preview status, provenance, and optional semantic retrieval refine ranking.",
       annotations: READ_ONLY,
       inputSchema: z.object({
-        query: z.string().trim().min(1).max(500).describe("Exact Bedrock identifier or natural-language question"),
+        query: z.string().trim().min(1).max(500).describe("Exact Bedrock identifier or natural-language developer question"),
         limit: z.number().int().min(1).max(10).optional(),
         kinds: z.array(kindSchema).max(10).optional(),
         categories: z.array(z.string().min(1).max(100)).max(10).optional(),
         stabilities: z.array(stabilitySchema).max(5).optional(),
         sourceTiers: z.array(z.number().int().min(1).max(4)).max(4).optional(),
+        source: z.string().trim().min(1).max(100).optional().describe("Exact indexed source id from list_sources"),
+        channel: channelSchema.optional().describe("Restrict results to stable, preview, or unknown source channel"),
+        module: z.string().trim().min(1).max(100).optional().describe("Exact Script API package/module name, for example @minecraft/server"),
+        pathPrefix: z.string().trim().min(1).max(500).optional().describe("Restrict results to indexed source paths beginning with this prefix"),
         minecraftVersion: z.string().min(1).max(50).optional(),
         apiVersion: z.string().min(1).max(50).optional(),
         includePreview: z.boolean().optional(),
@@ -132,6 +138,10 @@ export function registerKnowledgeTools(
           ...(args.categories !== undefined ? { categories: args.categories } : {}),
           ...(args.stabilities !== undefined ? { stabilities: args.stabilities } : {}),
           ...(args.sourceTiers !== undefined ? { sourceTiers: args.sourceTiers } : {}),
+          ...(args.source !== undefined ? { sourceId: args.source } : {}),
+          ...(args.channel !== undefined ? { channel: args.channel } : {}),
+          ...(args.module !== undefined ? { apiPackage: args.module } : {}),
+          ...(args.pathPrefix !== undefined ? { pathPrefix: args.pathPrefix } : {}),
           ...(args.minecraftVersion !== undefined ? { minecraftVersion: args.minecraftVersion } : {}),
           ...(args.apiVersion !== undefined ? { apiVersion: args.apiVersion } : {}),
           ...(args.includePreview !== undefined ? { includePreview: args.includePreview } : {}),
