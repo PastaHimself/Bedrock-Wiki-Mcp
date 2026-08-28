@@ -106,7 +106,7 @@ async function rebuildIndex(directoryArg: string | undefined): Promise<number> {
 async function syncSources(args: readonly string[]): Promise<number> {
   const parsed = sourceCommandArguments("sync-sources", args);
   const config = loadRuntimeConfig();
-  const includePreview = parsed.includePreview || config.includePreview;
+  const includePreview = parsed.includePreview || config.includePreview || false;
   const result = await syncConfiguredSources({
     dataDir: config.dataDir,
     includePreview,
@@ -133,7 +133,7 @@ async function syncSources(args: readonly string[]): Promise<number> {
 async function rebuildSources(args: readonly string[]): Promise<number> {
   const parsed = sourceCommandArguments("rebuild-sources", args);
   const config = loadRuntimeConfig();
-  const includePreview = parsed.includePreview || config.includePreview;
+  const includePreview = parsed.includePreview || config.includePreview || false;
   const result = await rebuildConfiguredSourcesIndex({
     dataDir: config.dataDir,
     includePreview,
