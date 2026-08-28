@@ -397,7 +397,7 @@ export async function openNpmSnapshot(dataDir: string, config: NpmSourceConfigEn
     throw error;
   }
   const manifest = JSON.parse(await readFile(join(directory, SNAPSHOT_MANIFEST), "utf8")) as NpmSnapshotManifest;
-  if (manifest.sourceId !== config.id || !/^[0-9a-f]{64}$/.test(manifest.revision)) {
+  if (manifest.sourceId !== config.id || !/^sha256:[0-9a-f]{64}$/.test(manifest.revision)) {
     throw new Error(`NPM_SNAPSHOT_INVALID: ${config.id} snapshot provenance is invalid`);
   }
   return {
