@@ -21,6 +21,130 @@ function objectRecord(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
 }
 
+function stripJsonComments(input: string): string {
+  let output = "";
+  let mode: "normal" | "string" | "line-comment" | "block-comment" = "normal";
+  let escaped = false;
+
+  for (let index = 0; index < input.length; index += 1) {
+    const current = input[index] ?? "";
+    const next = input[index + 1] ?? "";
+
+    if (mode === "string") {
+      output += current;
+      if (escaped) {
+        escaped = false;
+      } else if (current === "\\") {
+        escaped = true;
+      } else if (current === '"') {
+        mode = "normal";
+      }
+      continue;
+    }
+
+    if (mode === "line-comment") {
+      if (current === "\n" || current === "\r") {
+        output += current;
+        mode = "normal";
+      } else {
+        output += " ";
+      }
+      continue;
+    }
+
+    if (mode === "block-comment") {
+      if (current === "*" && next === "/") {
+        output += "  ";
+        index += 1;
+        mode = "normal";
+      } else if (current === "\n" || current === "\r") {
+        output += current;
+      } else {
+        output += " ";
+      }
+      continue;
+    }
+
+    if (current === '"') {
+      output += current;
+      mode = "string";
+      continue;
+    }
+    if (current === "/" && next === "/") {
+      output += "  ";
+      index += 1;
+      mode = "line-comment";
+      continue;
+    }
+    if (current === "/" && next === "*") {
+      output += "  ";
+      index += 1;
+      mode = "block-comment";
+      continue;
+    }
+
+    output += current;
+  }
+
+  return output;
+}
+
+function stripTrailingCommas(input: string): string {
+  let output = "";
+  let inString = false;
+  let escaped = false;
+
+  for (let index = 0; index < input.length; index += 1) {
+    const current = input[index] ?? "";
+
+    if (inString) {
+      output += current;
+      if (escaped) {
+        escaped = false;
+      } else if (current === "\\") {
+        escaped = true;
+      } else if (current === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (current === '"') {
+      output += current;
+      inString = true;
+      continue;
+    }
+
+    if (current === ",") {
+      let lookahead = index + 1;
+      while (lookahead < input.length && /\s/.test(input[lookahead] ?? "")) lookahead += 1;
+      const following = input[lookahead];
+      if (following === "}" || following === "]") {
+        output += " ";
+        continue;
+      }
+    }
+
+    output += current;
+  }
+
+  return output;
+}
+
+function parseJsonOrJsonc(input: string, path: string): unknown {
+  try {
+    return JSON.parse(input) as unknown;
+  } catch {
+    const jsonc = stripTrailingCommas(stripJsonComments(input));
+    try {
+      return JSON.parse(jsonc) as unknown;
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new Error(`Invalid JSON in ${path}: ${detail}`);
+    }
+  }
+}
+
 function inferredLifecycle(value: unknown): Lifecycle {
   return objectRecord(value)?.deprecated === true ? "deprecated" : "active";
 }
@@ -74,13 +198,7 @@ function propertyIdentifiers(parentTitle: string, property: string): string[] {
 }
 
 export function parseBedrockJson(input: string, path: string): JsonParseResult {
-  let root: unknown;
-  try {
-    root = JSON.parse(input) as unknown;
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    throw new Error(`Invalid JSON in ${path}: ${detail}`);
-  }
+  const root = parseJsonOrJsonc(input, path);
 
   const rootObject = objectRecord(root);
   if (!rootObject) {

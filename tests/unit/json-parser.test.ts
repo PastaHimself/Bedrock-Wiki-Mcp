@@ -19,6 +19,49 @@ describe("Bedrock JSON parser", () => {
     expect(health?.content).toContain("minecraft:health");
   });
 
+  it("accepts Bedrock JSONC comments and trailing commas without changing string contents", () => {
+    const parsed = parseBedrockJson(`{
+      "minecraft:entity": {
+        "description": {
+          "identifier": "minecraft:axolotl",
+          "documentation_url": "https://example.com/path//literal/*text*/"
+        },
+        "components": {
+          "minecraft:breedable": {
+            "mutation_factor": {
+              "variant": 0.00083 // roughly 1/1200
+            },
+          },
+        }
+      }
+    }`, "creator/Reference/Source/VanillaBehaviorPack/entities/axolotl.json");
+
+    expect(parsed.identifiers).toContain("minecraft:axolotl");
+    const breedable = parsed.chunks.find((chunk) => chunk.identifier === "minecraft:breedable");
+    expect(breedable?.content).toContain("0.00083");
+    expect(parsed.chunks[0]?.content).toContain("https://example.com/path//literal/*text*/");
+  });
+
+  it("accepts block comments used in relaxed Bedrock JSON", () => {
+    const parsed = parseBedrockJson(`{
+      /* behavior-pack entity metadata */
+      "minecraft:entity": {
+        "description": { "identifier": "example:commented" },
+        "components": { "minecraft:health": { "value": 20 } }
+      }
+    }`, "behavior_pack/entities/commented.json");
+
+    expect(parsed.identifiers).toContain("example:commented");
+    expect(parsed.chunks.some((chunk) => chunk.identifier === "minecraft:health")).toBe(true);
+  });
+
+  it("still rejects genuinely malformed JSON after JSONC normalization", () => {
+    expect(() => parseBedrockJson(
+      `{"minecraft:entity":{"description":{"identifier":"example:broken"} "components":{}}}`,
+      "behavior_pack/entities/broken.json",
+    )).toThrow("Invalid JSON in behavior_pack/entities/broken.json");
+  });
+
   it("uses custom entity event keys as primary chunk identifiers", () => {
     const parsed = parseBedrockJson(JSON.stringify({
       "minecraft:entity": {
