@@ -106,8 +106,11 @@ describe("configured source indexing", () => {
     const stableResult = await rebuildConfiguredSourcesIndex({ dataDir, checkoutRoot, configPath });
     expect(stableResult.sources.map((source) => source.sourceId)).toEqual(["stable_docs"]);
     expect(stableResult.validation.ok).toBe(true);
+    expect(await readdir(join(dataDir, "index"))).toEqual(["bedrock.db"]);
 
     let database = openDatabase(stableResult.targetPath, { mode: "readonly" });
+    const journal = database.prepare("PRAGMA journal_mode").get() as { journal_mode: string };
+    expect(journal.journal_mode.toLowerCase()).toBe("delete");
     expect(listKnowledgeSources(database).map((source) => source.id)).toEqual(["stable_docs"]);
     expect(listKnowledgeSources(database)[0]?.revision).toBe(STABLE_REVISION);
     expect(exactIdentifierSearch(database, "System.runInterval")).toHaveLength(1);
@@ -120,6 +123,7 @@ describe("configured source indexing", () => {
       includePreview: true,
     });
     expect(previewResult.sources.map((source) => source.sourceId)).toEqual(["stable_docs", "preview_docs"]);
+    expect(await readdir(join(dataDir, "index"))).toEqual(["bedrock.db"]);
 
     database = openDatabase(previewResult.targetPath, { mode: "readonly" });
     const hits = exactIdentifierSearch(database, "System.runInterval");
