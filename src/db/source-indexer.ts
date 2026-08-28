@@ -34,13 +34,7 @@ export interface RebuildSourcesIndexResult {
 async function cleanupBuildFiles(path: string): Promise<void> {
   await Promise.all([
     rm(path, { force: true }),
-    rm(`${path}-wal`, { force: true }),
-    rm(`${path}-shm`, { force: true }),
-  ]);
-}
-
-async function cleanupSidecars(path: string): Promise<void> {
-  await Promise.all([
+    rm(`${path}-journal`, { force: true }),
     rm(`${path}-wal`, { force: true }),
     rm(`${path}-shm`, { force: true }),
   ]);
@@ -58,7 +52,10 @@ export async function rebuildConfiguredSourcesIndex(
 
   await mkdir(dirname(targetPath), { recursive: true });
   const buildPath = join(dirname(targetPath), `.bedrock-${randomUUID()}.building.db`);
-  const database = openDatabase(buildPath);
+  // The staging database has exactly one writer and is never served directly.
+  // Keep it in rollback-journal mode so publishing one SQLite file never depends
+  // on WAL/SHM sidecars or unlinking an mmap-backed SHM file after close.
+  const database = openDatabase(buildPath, { journalMode: "delete" });
   const stats: SourceIndexStats[] = [];
   let aliasesDerived = 0;
   let validation: IndexValidationReport | undefined;
@@ -136,7 +133,6 @@ export async function rebuildConfiguredSourcesIndex(
     validation = validateIndex(database);
     if (!validation.ok) throw new Error(`Index validation failed: ${validation.errors.join("; ")}`);
     database.exec("PRAGMA optimize");
-    database.exec("PRAGMA wal_checkpoint(TRUNCATE)");
   } catch (error) {
     if (database.isTransaction) database.exec("ROLLBACK");
     database.close();
@@ -145,7 +141,6 @@ export async function rebuildConfiguredSourcesIndex(
   }
 
   database.close();
-  await cleanupSidecars(buildPath);
   try {
     await rename(buildPath, targetPath);
   } catch (error) {
