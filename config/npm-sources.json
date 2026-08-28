@@ -1,0 +1,33 @@
+{
+  "sources": [
+    {
+      "id": "minecraft_npm_stable",
+      "name": "Official Minecraft Script API npm metadata (Stable)",
+      "tier": 1,
+      "channel": "stable",
+      "defaultEnabled": true,
+      "packages": [
+        { "name": "@minecraft/server", "tags": ["latest"] },
+        { "name": "@minecraft/server-ui", "tags": ["latest"] },
+        { "name": "@minecraft/common", "tags": ["latest"] }
+      ]
+    },
+    {
+      "id": "minecraft_npm_preview",
+      "name": "Official Minecraft Script API npm metadata (Preview)",
+      "tier": 1,
+      "channel": "preview",
+      "defaultEnabled": false,
+      "packages": [
+        { "name": "@minecraft/server", "tags": ["beta"] },
+        { "name": "@minecraft/server-ui", "tags": ["beta", "rc"] },
+        { "name": "@minecraft/server-editor", "tags": ["beta"] },
+        { "name": "@minecraft/server-gametest", "tags": ["beta"] },
+        { "name": "@minecraft/server-net", "tags": ["beta"] },
+        { "name": "@minecraft/server-admin", "tags": ["beta"] },
+        { "name": "@minecraft/server-graphics", "tags": ["beta"] },
+        { "name": "@minecraft/diagnostics", "tags": ["beta"] }
+      ]
+    }
+  ]
+}

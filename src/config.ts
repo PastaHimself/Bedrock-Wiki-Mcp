@@ -19,6 +19,7 @@ const environmentSchema = z.object({
   BEDROCK_MCP_MAX_REQUEST_BYTES: z.coerce.number().int().min(16_384).max(4_194_304).default(524_288),
   BEDROCK_MCP_MAX_CONCURRENT_REQUESTS: z.coerce.number().int().min(1).max(512).default(32),
   BEDROCK_MCP_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).max(10_000).default(120),
+  BEDROCK_MCP_INCLUDE_PREVIEW: booleanStringSchema.default(false),
   BEDROCK_MCP_SEMANTIC_ENABLED: booleanStringSchema.default(false),
   BEDROCK_MCP_SEMANTIC_MODEL: z.string().trim().min(1).max(300).default("onnx-community/all-MiniLM-L6-v2-ONNX"),
   BEDROCK_MCP_SEMANTIC_TOP_K: z.coerce.number().int().min(5).max(100).default(40),
@@ -37,6 +38,8 @@ export interface AppConfig {
   readonly maxRequestBodySize: number;
   readonly maxConcurrentRequests: number;
   readonly rateLimitPerMinute: number;
+  /** Optional for backwards-compatible programmatic AppConfig fixtures; loadConfig always populates it. */
+  readonly includePreview?: boolean;
   readonly semanticEnabled: boolean;
   readonly semanticModel: string;
   readonly semanticTopK: number;
@@ -72,6 +75,7 @@ export function loadConfig(
     maxRequestBodySize: parsed.BEDROCK_MCP_MAX_REQUEST_BYTES,
     maxConcurrentRequests: parsed.BEDROCK_MCP_MAX_CONCURRENT_REQUESTS,
     rateLimitPerMinute: parsed.BEDROCK_MCP_RATE_LIMIT_PER_MINUTE,
+    includePreview: parsed.BEDROCK_MCP_INCLUDE_PREVIEW,
     semanticEnabled: parsed.BEDROCK_MCP_SEMANTIC_ENABLED,
     semanticModel: parsed.BEDROCK_MCP_SEMANTIC_MODEL,
     semanticTopK: parsed.BEDROCK_MCP_SEMANTIC_TOP_K,

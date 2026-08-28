@@ -18,16 +18,17 @@ import { rebuildSemanticIndex } from "./semantic/builder.js";
 import { coreSemanticFingerprint } from "./semantic/database.js";
 import { TransformersEmbedder } from "./semantic/embedder.js";
 import { openSemanticRetriever, type SqliteSemanticRetriever } from "./semantic/retriever.js";
+import { syncNpmSources } from "./sources/npm.js";
 import { syncConfiguredSources } from "./sources/sync.js";
 
 const HELP = `Bedrock Wiki MCP ${SERVICE_VERSION}
 
 Usage:
   bedrock-mcp serve                                  Start the HTTP MCP server using the existing read-only index
-  bedrock-mcp sync-sources [checkout-root]           Clone/fetch configured source checkouts safely
+  bedrock-mcp sync-sources [checkout-root]           Clone/fetch configured source checkouts and npm metadata
                          [--include-preview]          Include preview sources disabled by default
   bedrock-mcp rebuild-index [directory]              Rebuild the local curated knowledge index
-  bedrock-mcp rebuild-sources [checkout-root]        Rebuild from configured official source checkouts
+  bedrock-mcp rebuild-sources [checkout-root]        Rebuild from configured official source snapshots
                          [--include-preview]          Include preview sources disabled by default
   bedrock-mcp build-semantic-index                   Build optional local vector index from bedrock.db
   bedrock-mcp status [--json]                        Show index health, counts, revisions, and source coverage
@@ -48,6 +49,7 @@ Environment:
   BEDROCK_MCP_MAX_REQUEST_BYTES        MCP request-body limit (default: 524288)
   BEDROCK_MCP_MAX_CONCURRENT_REQUESTS  Concurrent /mcp request cap (default: 32)
   BEDROCK_MCP_RATE_LIMIT_PER_MINUTE    Per-client request cap (default: 120)
+  BEDROCK_MCP_INCLUDE_PREVIEW          true | false for source sync/rebuild (default: false)
   BEDROCK_MCP_SEMANTIC_ENABLED         true | false (default: false)
   BEDROCK_MCP_SEMANTIC_MODEL           Local Transformers.js embedding model id
   BEDROCK_MCP_SEMANTIC_TOP_K           Semantic candidate count (default: 40)
@@ -88,6 +90,7 @@ async function rebuildIndex(directoryArg: string | undefined): Promise<number> {
       name: "Local curated knowledge",
       tier: 3,
       channel: "stable",
+      sourceType: "local",
       revision: "local",
     };
     const result = await rebuildLocalIndex(database, { directory, source });
@@ -103,9 +106,10 @@ async function rebuildIndex(directoryArg: string | undefined): Promise<number> {
 async function syncSources(args: readonly string[]): Promise<number> {
   const parsed = sourceCommandArguments("sync-sources", args);
   const config = loadRuntimeConfig();
+  const includePreview = parsed.includePreview || config.includePreview || false;
   const result = await syncConfiguredSources({
     dataDir: config.dataDir,
-    includePreview: parsed.includePreview,
+    includePreview,
     ...(parsed.checkoutRoot ? { checkoutRoot: parsed.checkoutRoot } : {}),
   });
 
@@ -115,16 +119,24 @@ async function syncSources(args: readonly string[]): Promise<number> {
       `${source.sourceId}: ${source.status}${previous} ${source.revision.slice(0, 12)} (${source.branch})\n`,
     );
   }
-  process.stdout.write(`Synchronized ${result.sources.length} sources under ${result.checkoutRoot}.\n`);
+
+  const npmSources = await syncNpmSources({ dataDir: config.dataDir, includePreview });
+  for (const source of npmSources) {
+    process.stdout.write(
+      `${source.sourceId}: ${source.status} ${source.revision.slice(0, 12)} (${source.packages} packages, ${source.tags} dist-tags)\n`,
+    );
+  }
+  process.stdout.write(`Synchronized ${result.sources.length + npmSources.length} sources under ${result.checkoutRoot} and ${config.dataDir}.\n`);
   return 0;
 }
 
 async function rebuildSources(args: readonly string[]): Promise<number> {
   const parsed = sourceCommandArguments("rebuild-sources", args);
   const config = loadRuntimeConfig();
+  const includePreview = parsed.includePreview || config.includePreview || false;
   const result = await rebuildConfiguredSourcesIndex({
     dataDir: config.dataDir,
-    includePreview: parsed.includePreview,
+    includePreview,
     ...(parsed.checkoutRoot ? { checkoutRoot: parsed.checkoutRoot } : {}),
   });
   const documents = result.sources.reduce((sum, source) => sum + source.documents, 0);
