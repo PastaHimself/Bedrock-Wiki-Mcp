@@ -17,13 +17,14 @@ describe("loadConfig", () => {
       maxRequestBodySize: 524288,
       maxConcurrentRequests: 32,
       rateLimitPerMinute: 120,
+      includePreview: false,
       semanticEnabled: false,
       semanticModel: "onnx-community/all-MiniLM-L6-v2-ONNX",
       semanticTopK: 40,
     });
   });
 
-  it("parses deployment, security, and semantic overrides", () => {
+  it("parses deployment, security, source, and semantic overrides", () => {
     const config = loadConfig(
       {
         NODE_ENV: "production",
@@ -38,6 +39,7 @@ describe("loadConfig", () => {
         BEDROCK_MCP_MAX_REQUEST_BYTES: "262144",
         BEDROCK_MCP_MAX_CONCURRENT_REQUESTS: "12",
         BEDROCK_MCP_RATE_LIMIT_PER_MINUTE: "90",
+        BEDROCK_MCP_INCLUDE_PREVIEW: "true",
         BEDROCK_MCP_SEMANTIC_ENABLED: "true",
         BEDROCK_MCP_SEMANTIC_MODEL: "example/model",
         BEDROCK_MCP_SEMANTIC_TOP_K: "25",
@@ -58,6 +60,7 @@ describe("loadConfig", () => {
       maxRequestBodySize: 262144,
       maxConcurrentRequests: 12,
       rateLimitPerMinute: 90,
+      includePreview: true,
       semanticEnabled: true,
       semanticModel: "example/model",
       semanticTopK: 25,
@@ -73,6 +76,7 @@ describe("loadConfig", () => {
     expect(() => loadConfig({ BEDROCK_MCP_MAX_REQUEST_BYTES: "100" })).toThrow();
     expect(() => loadConfig({ BEDROCK_MCP_MAX_CONCURRENT_REQUESTS: "0" })).toThrow();
     expect(() => loadConfig({ BEDROCK_MCP_TRUSTED_PROXY_IPS: "127.0.0.1,not-an-ip" })).toThrow();
+    expect(() => loadConfig({ BEDROCK_MCP_INCLUDE_PREVIEW: "yes" })).toThrow();
     expect(() => loadConfig({ BEDROCK_MCP_SEMANTIC_ENABLED: "yes" })).toThrow();
     expect(() => loadConfig({ BEDROCK_MCP_SEMANTIC_TOP_K: "101" })).toThrow();
   });
