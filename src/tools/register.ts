@@ -383,7 +383,7 @@ export function registerKnowledgeTools(
     async (args) => {
       try {
         if (!localLlm) {
-          throw new Error("LOCAL_LLM_DISABLED: set BEDROCK_MCP_LOCAL_LLM_ENABLED=true and start llama-server on the configured loopback endpoint");
+          throw new Error("LOCAL_LLM_DISABLED: set BEDROCK_MCP_LOCAL_LLM_ENABLED=true; llama-server is started and the model is downloaded automatically when the server starts");
         }
         const options: KnowledgeSearchOptions = {
           query: args.query,

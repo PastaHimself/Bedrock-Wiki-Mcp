@@ -13,7 +13,8 @@ EnvironmentFile=/etc/bedrock-mcp/bedrock-mcp.env
 ExecStart=/usr/bin/node /opt/bedrock-wiki-mcp/dist/index.js serve
 Restart=on-failure
 RestartSec=5s
-TimeoutStartSec=30s
+# The first start may download and load the Qwen GGUF model.
+TimeoutStartSec=20min
 TimeoutStopSec=30s
 KillSignal=SIGTERM
 UMask=0027
@@ -36,9 +37,11 @@ MemoryDenyWriteExecute=true
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 SystemCallArchitectures=native
 
-# The serving process only needs read access to the published index and source
-# metadata. Scheduled synchronization/indexing is performed by a separate unit.
+# The serving process reads the published index and source metadata, and may
+# populate the local model cache on first startup. Scheduled synchronization/
+# indexing is performed by a separate unit.
 ReadOnlyPaths=/var/lib/bedrock-mcp
+ReadWritePaths=/var/lib/bedrock-mcp/models/huggingface
 
 [Install]
 WantedBy=multi-user.target

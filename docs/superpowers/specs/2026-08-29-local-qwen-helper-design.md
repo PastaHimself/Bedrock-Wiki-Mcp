@@ -17,6 +17,7 @@ The default model is `Qwen/Qwen3-1.7B-GGUF`, served by `llama-server` with the o
 - Citation references (`[R1]`, `[R2]`, …) mapped back to indexed chunks and source metadata.
 - Explicit disabled, unavailable, timeout, HTTP, and malformed-response errors.
 - Configuration and deployment instructions for running Qwen locally on loopback.
+- Automatic first-run llama-server startup and Hugging Face model caching.
 
 ### Out of scope
 
@@ -36,7 +37,7 @@ The default model is `Qwen/Qwen3-1.7B-GGUF`, served by `llama-server` with the o
 5. Remove any Qwen thinking markers, bound the answer, and parse cited reference IDs.
 6. Return the answer, model name, evidence resources, citation mappings, and a grounded/warning status as MCP structured content.
 
-The local model client is an adapter boundary. The server does not need to know whether the endpoint is backed by Qwen, another GGUF model, or a test double, but production configuration defaults to Qwen3.
+The local model client is an adapter boundary. The server does not need to know whether the endpoint is backed by Qwen, another GGUF model, or a test double, but production configuration defaults to Qwen3. At `serve` startup, the application first probes the configured loopback health endpoint. If no healthy server is present, it starts `llama-server` without a shell, passes `-hf <model>`, and waits for readiness. `llama-server` performs the first-run Hugging Face download into the persistent cache; a separately supervised server is reused when already healthy.
 
 ## MCP contract
 
@@ -77,18 +78,20 @@ The following environment variables are added:
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `BEDROCK_MCP_LOCAL_LLM_ENABLED` | `false` | Enable `ask_bedrock` inference calls. |
+| `BEDROCK_MCP_LOCAL_LLM_ENABLED` | `true` | Enable `ask_bedrock` inference calls and automatic local model startup. |
 | `BEDROCK_MCP_LOCAL_LLM_BASE_URL` | `http://127.0.0.1:8081/v1` | Local OpenAI-compatible API base URL. |
+| `BEDROCK_MCP_LOCAL_LLM_BINARY` | `llama-server` | Inference runtime executable used for automatic startup. |
 | `BEDROCK_MCP_LOCAL_LLM_MODEL` | `Qwen/Qwen3-1.7B-GGUF:Q8_0` | Model identifier sent to the server. |
+| `BEDROCK_MCP_LOCAL_LLM_STARTUP_TIMEOUT_MS` | `900000` | Maximum first-run download/model-load time. |
 | `BEDROCK_MCP_LOCAL_LLM_TIMEOUT_MS` | `60000` | Per-request inference timeout. |
 | `BEDROCK_MCP_LOCAL_LLM_MAX_TOKENS` | `512` | Maximum generated tokens. |
 | `BEDROCK_MCP_LOCAL_LLM_RETRIEVAL_LIMIT` | `6` | Maximum evidence resources supplied to Qwen. |
 
-The application does not start or download llama-server itself. Operators start the local model server separately, which keeps model-process lifecycle and model-cache ownership explicit. `LocalLlmClient` permits one active generation; additional concurrent helper calls receive a retryable busy error.
+The application starts the local model server when no healthy loopback server is already available. Operators must install the `llama-server` executable; the application does not download or compile the inference runtime itself. The model cache is stored beneath the configured data directory, and the child process is stopped with the MCP process. `LocalLlmClient` permits one active generation; additional concurrent helper calls receive a retryable busy error.
 
 ## Verification
 
 - Unit tests cover configuration defaults/validation, request serialization, timeout and malformed responses, prompt grounding/citation formatting, and tool registration.
 - Existing search, fetch, security, source, and semantic tests must remain green.
 - Typecheck and production build must pass.
-- Deployment documentation includes the exact Qwen launch command, loopback-only guidance, and an optional systemd unit with a readiness wait script and restart policy.
+- Deployment documentation includes automatic startup/cache behavior, loopback-only guidance, and an optional systemd unit with a readiness wait script and restart policy.

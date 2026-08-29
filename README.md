@@ -48,7 +48,7 @@ The public surface intentionally stays small and read-only:
 - `get_definition` — exact identifier lookup with stable-first, version-aware handling plus relevant indexed code/examples
 - `list_sources` — indexed source provenance, trust tiers, release channel, counts, health, duplicate percentage, revision, and last indexing time
 - `list_categories` — controlled Bedrock development categories currently present in the index
-- `ask_bedrock` — optional local Qwen answer generation over search evidence with `[R#]` citations; disabled unless explicitly enabled
+- `ask_bedrock` — local Qwen answer generation over search evidence with `[R#]` citations; enabled by default and disableable with `BEDROCK_MCP_LOCAL_LLM_ENABLED=false`
 
 The public MCP server does **not** expose arbitrary file reads, shell commands, database writes, source synchronization, backup, benchmark, status administration, or index-update operations.
 
@@ -112,9 +112,9 @@ For constrained servers, keep the model cache and `semantic.db` on persistent st
 
 ### Optional local Qwen helper
 
-The answer helper is local-only. It searches the existing SQLite index, gives bounded excerpts to Qwen, and returns the answer together with the exact indexed resources used. It does not call a hosted AI API and does not replace the deterministic retrieval tools.
+The answer helper is local-only and enabled by default. It searches the existing SQLite index, gives bounded excerpts to Qwen, and returns the answer together with the exact indexed resources used. It does not call a hosted AI API and does not replace the deterministic retrieval tools.
 
-Install a current `llama.cpp` build that provides `llama-server`, then start the official Qwen3 1.7B GGUF on loopback:
+Install a current `llama.cpp` build that provides `llama-server`. When the MCP server starts with the default settings, it launches llama-server on loopback and `-hf` downloads the official Qwen3 1.7B GGUF into the persistent model cache on first startup. The automatic command is equivalent to:
 
 ~~~bash
 llama-server \
@@ -132,13 +132,15 @@ Enable the helper in `.env`:
 ~~~text
 BEDROCK_MCP_LOCAL_LLM_ENABLED=true
 BEDROCK_MCP_LOCAL_LLM_BASE_URL=http://127.0.0.1:8081/v1
+BEDROCK_MCP_LOCAL_LLM_BINARY=llama-server
 BEDROCK_MCP_LOCAL_LLM_MODEL=Qwen/Qwen3-1.7B-GGUF:Q8_0
+BEDROCK_MCP_LOCAL_LLM_STARTUP_TIMEOUT_MS=900000
 BEDROCK_MCP_LOCAL_LLM_TIMEOUT_MS=60000
 BEDROCK_MCP_LOCAL_LLM_MAX_TOKENS=512
 BEDROCK_MCP_LOCAL_LLM_RETRIEVAL_LIMIT=6
 ~~~
 
-Start `llama-server` before the MCP process. The helper uses `/no_think` for normal lookup questions, limits evidence to six resources/2,000 characters so it fits the 4K model context with generation space, rejects overlapping local generations, and reports a clear error if the local endpoint is disabled or unavailable. Keep port 8081 private; only expose the MCP endpoint through your normal reverse proxy.
+The helper uses `/no_think` for normal lookup questions, limits evidence to six resources/2,000 characters so it fits the 4K model context with generation space, rejects overlapping local generations, and reports a clear error if the local endpoint is disabled or unavailable. Keep port 8081 private; only expose the MCP endpoint through your normal reverse proxy. Set `BEDROCK_MCP_LOCAL_LLM_ENABLED=false` if you want to run the MCP without local inference.
 
 ## Knowledge sources
 

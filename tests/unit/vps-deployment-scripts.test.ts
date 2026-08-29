@@ -121,6 +121,7 @@ describe("small VPS deployment workflow", () => {
 
     expect(bootstrap).toContain('APP_DIR="/opt/bedrock-wiki-mcp"');
     expect(bootstrap).toContain('DATA_DIR="/var/lib/bedrock-mcp"');
+    expect(bootstrap).toContain('"$DATA_DIR/models/huggingface"');
     expect(bootstrap).toContain('CONFIG_DIR="/etc/bedrock-mcp"');
     expect(bootstrap).toContain('SOURCE_USER="${SUDO_USER:-$(stat -c');
     expect(bootstrap).toContain("runuser -u \"$SOURCE_USER\" -- git");
