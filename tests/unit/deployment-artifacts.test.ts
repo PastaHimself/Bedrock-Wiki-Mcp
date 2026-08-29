@@ -23,9 +23,13 @@ describe("production deployment artifacts", () => {
     const unit = await text("deploy/systemd/bedrock-qwen.service");
     expect(unit).toContain("User=bedrock-mcp");
     expect(unit).toContain("Environment=HF_HOME=/var/lib/bedrock-mcp/models/huggingface");
+    expect(unit).toContain("Environment=BEDROCK_MCP_LOCAL_LLM_THREADS=2");
+    expect(unit).toContain("EnvironmentFile=-/etc/bedrock-mcp/bedrock-mcp.env");
     expect(unit).toContain("-hf Qwen/Qwen3-1.7B-GGUF:Q8_0");
     expect(unit).toContain("--host 127.0.0.1");
     expect(unit).toContain("--ctx-size 4096");
+    expect(unit).toContain("--threads ${BEDROCK_MCP_LOCAL_LLM_THREADS}");
+    expect(unit).toContain("--threads-batch ${BEDROCK_MCP_LOCAL_LLM_THREADS}");
     expect(unit).toContain("--parallel 1");
     expect(unit).toContain("ExecStartPost=/usr/bin/bash /opt/bedrock-wiki-mcp/deploy/scripts/wait-for-local-llm.sh");
     expect(unit).toContain("Restart=on-failure");
@@ -81,6 +85,7 @@ describe("production deployment artifacts", () => {
     expect(environment).toContain("BEDROCK_MCP_SEMANTIC_MODEL=onnx-community/all-MiniLM-L6-v2-ONNX");
     expect(environment).toContain("BEDROCK_MCP_LOCAL_LLM_ENABLED=true");
     expect(environment).toContain("BEDROCK_MCP_LOCAL_LLM_BINARY=llama-server");
+    expect(environment).toContain("BEDROCK_MCP_LOCAL_LLM_THREADS=2");
     expect(environment).toContain("BEDROCK_MCP_LOCAL_LLM_STARTUP_TIMEOUT_MS=900000");
     expect(environment).toContain("BEDROCK_MCP_LOCAL_LLM_MODEL=Qwen/Qwen3-1.7B-GGUF:Q8_0");
     expect(environment).toContain("BEDROCK_MCP_LOCAL_LLM_MAX_TOKENS=512");

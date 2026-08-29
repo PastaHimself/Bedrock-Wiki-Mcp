@@ -82,6 +82,7 @@ The following environment variables are added:
 | `BEDROCK_MCP_LOCAL_LLM_BASE_URL` | `http://127.0.0.1:8081/v1` | Local OpenAI-compatible API base URL. |
 | `BEDROCK_MCP_LOCAL_LLM_BINARY` | `llama-server` | Inference runtime executable used for automatic startup. |
 | `BEDROCK_MCP_LOCAL_LLM_MODEL` | `Qwen/Qwen3-1.7B-GGUF:Q8_0` | Model identifier sent to the server. |
+| `BEDROCK_MCP_LOCAL_LLM_THREADS` | `2` | llama.cpp worker threads; use `1` on stricter container limits. |
 | `BEDROCK_MCP_LOCAL_LLM_STARTUP_TIMEOUT_MS` | `900000` | Maximum first-run download/model-load time. |
 | `BEDROCK_MCP_LOCAL_LLM_TIMEOUT_MS` | `60000` | Per-request inference timeout. |
 | `BEDROCK_MCP_LOCAL_LLM_MAX_TOKENS` | `512` | Maximum generated tokens. |

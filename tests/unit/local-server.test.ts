@@ -19,11 +19,22 @@ describe("local llama-server startup", () => {
       "--host", "127.0.0.1",
       "--port", "8081",
       "--ctx-size", "4096",
+      "--threads", "2",
+      "--threads-batch", "2",
       "--parallel", "1",
     ]);
     expect(() => localLlmServerArguments(
       "https://example.com/v1",
       "qwen",
+    )).toThrow("LOCAL_LLM_INVALID_REQUEST");
+  });
+
+  it("rejects thread counts outside the supported range", () => {
+    expect(() => localLlmServerArguments(
+      "http://127.0.0.1:8081/v1",
+      "qwen",
+      4096,
+      0,
     )).toThrow("LOCAL_LLM_INVALID_REQUEST");
   });
 
@@ -68,6 +79,7 @@ describe("local llama-server startup", () => {
         model: "Qwen/Qwen3-1.7B-GGUF:Q8_0",
         binary: "/opt/llama-server",
         cacheDir,
+        threads: 4,
         startupTimeoutMs: 10_000,
         fetchImpl: async () => {
           healthChecks += 1;
@@ -87,6 +99,7 @@ describe("local llama-server startup", () => {
       expect(args).toContain("Qwen/Qwen3-1.7B-GGUF:Q8_0");
       expect(args).toContain("--host");
       expect(args).toContain("127.0.0.1");
+      expect(args).toEqual(expect.arrayContaining(["--threads", "4", "--threads-batch", "4"]));
       expect(cacheEnvironment).toBe(cacheDir);
       expect(handle.startedByProcess).toBe(true);
 
