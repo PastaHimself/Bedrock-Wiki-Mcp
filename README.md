@@ -27,9 +27,9 @@ The server currently provides:
 - authoritative read-only npm metadata snapshots for verified `@minecraft/*` Script API modules
 - Minecraft/API version-compatible filtering and ranking
 - intent-aware ranking for definitions, examples, manifests, package versions, debugging, stable, and preview questions
+- deterministic lookup planning that extracts likely identifiers/modules and recommends the next retrieval tool without generating answers
 - conservative cross-source duplicate suppression that preserves distinct versions/channels
 - optional local Transformers.js + sqlite-vec semantic retrieval with lexical fallback
-- optional local Qwen3 answer helper grounded in indexed evidence, with resource citations
 - controlled `doc_*` / `chk_*` fetching; no arbitrary filesystem reads
 - section-aware fetch context and code/example evidence from `get_definition`
 - verified Microsoft/Mojang Git source ingestion plus lower-ranked community knowledge
@@ -37,20 +37,20 @@ The server currently provides:
 - source health, provenance, duplicate percentage, and indexing timestamps through `list_sources`
 - online SQLite backups with retention
 - stable and preview retrieval quality suites with per-question rank gates
-- no paid API, embedding API, or hosted vector database required
+- no paid API, embedding API, hosted vector database, or generative model required
 
 ## Public MCP tools
 
 The public surface intentionally stays small and read-only:
 
-- `search` — exact + lexical search, optionally fused with local semantic retrieval; supports optional source/category/channel/module/path/version filters
+- `search` — exact + lexical search, optionally fused with local semantic retrieval; supports optional source/category/channel/module/path/version filters and returns the deterministic query plan used for retrieval
 - `fetch` — fetch server-issued document/chunk IDs with bounded adjacent or heading-section context
-- `get_definition` — exact identifier lookup with stable-first, version-aware handling plus relevant indexed code/examples
+- `get_definition` — exact identifier lookup with stable-first, version-aware handling plus relevant indexed code/examples; it can extract one likely identifier from a short definition question
 - `list_sources` — indexed source provenance, trust tiers, release channel, counts, health, duplicate percentage, revision, and last indexing time
 - `list_categories` — controlled Bedrock development categories currently present in the index
-- `ask_bedrock` — local Qwen answer generation over search evidence with `[R#]` citations; enabled by default and disableable with `BEDROCK_MCP_LOCAL_LLM_ENABLED=false`
+- `plan_lookup` — deterministic mini helper that reports intent, identifier/module candidates, useful search kinds, and the best next MCP retrieval tool
 
-The public MCP server does **not** expose arbitrary file reads, shell commands, database writes, source synchronization, backup, benchmark, status administration, or index-update operations.
+The public MCP server does **not** expose arbitrary file reads, shell commands, database writes, source synchronization, backup, benchmark, status administration, index-update operations, or free-form answer generation.
 
 ## Retrieval behavior
 
@@ -110,41 +110,13 @@ BEDROCK_MCP_SEMANTIC_ENABLED=true
 
 For constrained servers, keep the model cache and `semantic.db` on persistent storage and use the default MiniLM-class model rather than a substantially larger embedding model. Semantic retrieval remains optional; the six public tools and exact/lexical behavior are fully available without it.
 
-### Optional local Qwen helper
+### Deterministic query helper
 
-The answer helper is local-only and enabled by default. It searches the existing SQLite index, gives bounded excerpts to Qwen, and returns the answer together with the exact indexed resources used. It does not call a hosted AI API and does not replace the deterministic retrieval tools.
+`plan_lookup` is the small routing helper for clients that need to decide what they are trying to retrieve before calling another tool. It is implemented with bounded parsing rules rather than a generative model, so it cannot invent Bedrock facts. It only returns a structured lookup plan.
 
-Install a current `llama.cpp` build that provides `llama-server`. When the MCP server starts with the default settings, it launches llama-server on loopback and `-hf` downloads the official Qwen3 1.7B GGUF into the persistent model cache on first startup. The automatic command is equivalent to:
+For example, a question such as `What is world.afterEvents.playerSpawn?` is classified as a definition lookup, the identifier is extracted, and `get_definition` is recommended. A query containing a server-issued `doc_*` or `chk_*` id is routed to `fetch`; source/category discovery questions are routed to their corresponding list tools. Module names such as `@minecraft/server`, stable/preview intent, example/debugging/version/manifest intent, and likely exact identifiers are also exposed to the caller.
 
-~~~bash
-llama-server \
-  -hf Qwen/Qwen3-1.7B-GGUF:Q8_0 \
-  --host 127.0.0.1 \
-  --port 8081 \
-  --ctx-size 4096 \
-  --threads 2 \
-  --threads-batch 2 \
-  --parallel 1
-~~~
-
-The official Q8 model is about 1.83 GB on disk. On a 3 GiB host, keep the context and concurrency conservative; CPU speed affects response time, while model weights and context consume RAM. If the combined Node/Qwen process exceeds available memory, use a smaller Qwen3 quantization or Qwen3 0.6B without changing the MCP integration.
-
-Enable the helper in `.env`:
-
-~~~text
-BEDROCK_MCP_LOCAL_LLM_ENABLED=true
-BEDROCK_MCP_LOCAL_LLM_BASE_URL=http://127.0.0.1:8081/v1
-BEDROCK_MCP_LOCAL_LLM_BINARY=llama-server
-BEDROCK_MCP_LOCAL_LLM_MODEL=Qwen/Qwen3-1.7B-GGUF:Q8_0
-# Use 1 on hosts with strict process/thread limits.
-BEDROCK_MCP_LOCAL_LLM_THREADS=2
-BEDROCK_MCP_LOCAL_LLM_STARTUP_TIMEOUT_MS=900000
-BEDROCK_MCP_LOCAL_LLM_TIMEOUT_MS=60000
-BEDROCK_MCP_LOCAL_LLM_MAX_TOKENS=512
-BEDROCK_MCP_LOCAL_LLM_RETRIEVAL_LIMIT=6
-~~~
-
-The helper uses `/no_think` for normal lookup questions, limits evidence to six resources/2,000 characters so it fits the 4K model context with generation space, rejects overlapping local generations, and reports a clear error if the local endpoint is disabled or unavailable. If `llama-server` is missing or cannot load the model, the MCP stays online with deterministic tools available and `ask_bedrock` reports the local-runtime error. Keep port 8081 private; only expose the MCP endpoint through your normal reverse proxy. Set `BEDROCK_MCP_LOCAL_LLM_ENABLED=false` if you want to run the MCP without local inference.
+`search` runs the helper automatically and includes its plan in the response. It uses only conservative hints such as a safe extracted exact identifier or module when the caller did not already specify a stronger filter. `get_definition` uses the same helper to extract one likely identifier from a short question. Neither tool generates a prose answer.
 
 ## Knowledge sources
 

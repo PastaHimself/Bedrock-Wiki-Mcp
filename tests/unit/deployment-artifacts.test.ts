@@ -11,35 +11,13 @@ describe("production deployment artifacts", () => {
     expect(unit).toContain("User=bedrock-mcp");
     expect(unit).toContain("Group=bedrock-mcp");
     expect(unit).toContain("ExecStart=/usr/bin/node /opt/bedrock-wiki-mcp/dist/index.js serve");
-    expect(unit).toContain("TimeoutStartSec=20min");
+    expect(unit).toContain("TimeoutStartSec=2min");
     expect(unit).toContain("NoNewPrivileges=true");
     expect(unit).toContain("ProtectSystem=strict");
     expect(unit).toContain("ReadOnlyPaths=/var/lib/bedrock-mcp");
-    expect(unit).toContain("ReadWritePaths=/var/lib/bedrock-mcp/models/huggingface");
+    expect(unit).not.toContain("models/huggingface");
+    expect(unit).not.toContain("Qwen");
     expect(unit).not.toContain("0.0.0.0");
-  });
-
-  it("provides an optional supervised loopback Qwen service with persistent cache", async () => {
-    const unit = await text("deploy/systemd/bedrock-qwen.service");
-    expect(unit).toContain("User=bedrock-mcp");
-    expect(unit).toContain("Environment=HF_HOME=/var/lib/bedrock-mcp/models/huggingface");
-    expect(unit).toContain("Environment=BEDROCK_MCP_LOCAL_LLM_THREADS=2");
-    expect(unit).toContain("EnvironmentFile=-/etc/bedrock-mcp/bedrock-mcp.env");
-    expect(unit).toContain("-hf Qwen/Qwen3-1.7B-GGUF:Q8_0");
-    expect(unit).toContain("--host 127.0.0.1");
-    expect(unit).toContain("--ctx-size 4096");
-    expect(unit).toContain("--threads ${BEDROCK_MCP_LOCAL_LLM_THREADS}");
-    expect(unit).toContain("--threads-batch ${BEDROCK_MCP_LOCAL_LLM_THREADS}");
-    expect(unit).toContain("--parallel 1");
-    expect(unit).toContain("ExecStartPost=/usr/bin/bash /opt/bedrock-wiki-mcp/deploy/scripts/wait-for-local-llm.sh");
-    expect(unit).toContain("Restart=on-failure");
-    expect(unit).toContain("ReadWritePaths=/var/lib/bedrock-mcp/models/huggingface");
-    expect(unit).not.toContain("0.0.0.0");
-
-    const readiness = await text("deploy/scripts/wait-for-local-llm.sh");
-    expect(readiness).toContain("curl --fail --silent");
-    expect(readiness).toContain("/health");
-    expect(readiness).toContain("Timed out");
   });
 
   it("backs up, refreshes lexical/semantic knowledge, then restarts the server", async () => {
@@ -83,12 +61,8 @@ describe("production deployment artifacts", () => {
     expect(environment).toContain("BEDROCK_MCP_MAX_CONCURRENT_REQUESTS=8");
     expect(environment).toContain("BEDROCK_MCP_SEMANTIC_ENABLED=false");
     expect(environment).toContain("BEDROCK_MCP_SEMANTIC_MODEL=onnx-community/all-MiniLM-L6-v2-ONNX");
-    expect(environment).toContain("BEDROCK_MCP_LOCAL_LLM_ENABLED=true");
-    expect(environment).toContain("BEDROCK_MCP_LOCAL_LLM_BINARY=llama-server");
-    expect(environment).toContain("BEDROCK_MCP_LOCAL_LLM_THREADS=2");
-    expect(environment).toContain("BEDROCK_MCP_LOCAL_LLM_STARTUP_TIMEOUT_MS=900000");
-    expect(environment).toContain("BEDROCK_MCP_LOCAL_LLM_MODEL=Qwen/Qwen3-1.7B-GGUF:Q8_0");
-    expect(environment).toContain("BEDROCK_MCP_LOCAL_LLM_MAX_TOKENS=512");
+    expect(environment).not.toContain("BEDROCK_MCP_LOCAL_LLM_");
+    expect(environment).not.toContain("Qwen");
     expect(environment).toContain("BEDROCK_MCP_BACKUP_RETAIN=3");
     expect(environment).toContain("BEDROCK_MCP_MIN_FREE_BYTES=2147483648");
   });

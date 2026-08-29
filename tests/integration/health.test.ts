@@ -21,15 +21,6 @@ function testConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     semanticEnabled: false,
     semanticModel: "onnx-community/all-MiniLM-L6-v2-ONNX",
     semanticTopK: 40,
-    localLlmEnabled: false,
-    localLlmBaseUrl: "http://127.0.0.1:8081/v1",
-    localLlmBinary: "llama-server",
-    localLlmModel: "Qwen/Qwen3-1.7B-GGUF:Q8_0",
-    localLlmThreads: 2,
-    localLlmStartupTimeoutMs: 900000,
-    localLlmTimeoutMs: 60000,
-    localLlmMaxTokens: 512,
-    localLlmRetrievalLimit: 6,
     ...overrides,
   };
 }
@@ -39,11 +30,11 @@ afterEach(async () => {
 });
 
 describe("HTTP server", () => {
-  it("allows the local model timeout to complete before the HTTP request expires", () => {
-    const server = createHttpServer({ config: testConfig({ localLlmTimeoutMs: 45000 }) });
+  it("uses a bounded request timeout without a local answer model", () => {
+    const server = createHttpServer({ config: testConfig() });
     openServers.push(server);
 
-    expect(server.requestTimeout).toBe(55000);
+    expect(server.requestTimeout).toBe(30000);
   });
 
   it("serves a minimal unauthenticated health response", async () => {
