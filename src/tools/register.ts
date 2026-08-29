@@ -1,14 +1,13 @@
 import type { DatabaseSync } from "node:sqlite";
 import type { McpServer } from "@modelcontextprotocol/server";
 import * as z from "zod/v4";
-import { answerBedrock } from "../ai/answer.js";
-import type { LocalLlm } from "../ai/local-llm.js";
 import type { SemanticRetriever } from "../semantic/retriever.js";
 import { getDefinition } from "../search/definition.js";
 import { listKnowledgeCategories, listKnowledgeSources } from "../search/discovery.js";
 import { searchKnowledge, type KnowledgeSearchOptions } from "../search/engine.js";
 import { fetchKnowledge } from "../search/fetch.js";
 import { hybridSearchKnowledge } from "../search/hybrid.js";
+import { planBedrockQuery } from "../search/query-helper.js";
 
 const READ_ONLY = {
   readOnlyHint: true,
@@ -20,6 +19,32 @@ const READ_ONLY = {
 const kindSchema = z.enum(["docs", "api", "component", "json", "code", "example", "reference"]);
 const stabilitySchema = z.enum(["stable", "beta", "experimental", "internal", "unknown"]);
 const channelSchema = z.enum(["stable", "preview", "unknown"]);
+
+const helperSchema = z.object({
+  originalQuery: z.string(),
+  normalizedQuery: z.string(),
+  searchQuery: z.string(),
+  intent: z.enum([
+    "definition",
+    "example",
+    "debugging",
+    "version",
+    "manifest",
+    "source_discovery",
+    "category_discovery",
+    "evidence_fetch",
+    "general",
+  ]),
+  recommendedTool: z.enum(["search", "get_definition", "fetch", "list_sources", "list_categories"]),
+  confidence: z.number().min(0).max(1),
+  identifiers: z.array(z.string()).max(8),
+  keywords: z.array(z.string()).max(10),
+  suggestedKinds: z.array(kindSchema).max(7),
+  reasons: z.array(z.string()).max(4),
+  module: z.string().optional(),
+  fetchId: z.string().optional(),
+  includePreview: z.boolean().optional(),
+});
 
 const provenanceShape = {
   repository: z.string().optional(),
@@ -119,14 +144,14 @@ export function registerKnowledgeTools(
   database?: DatabaseSync,
   semantic?: SemanticRetriever,
   semanticTopK = 40,
-  localLlm?: LocalLlm,
-  localLlmRetrievalLimit = 6,
+  _legacyLocalLlm?: unknown,
+  _legacyLocalLlmRetrievalLimit?: number,
 ): void {
   server.registerTool(
     "search",
     {
       title: "Search Bedrock knowledge",
-      description: "Search indexed Minecraft Bedrock documentation, Script API definitions, JSON, code, and official module metadata. Exact identifiers receive dominant relevance; developer intent, stable/preview status, provenance, and optional semantic retrieval refine ranking.",
+      description: "Search indexed Minecraft Bedrock documentation, Script API definitions, JSON, code, and official module metadata. A deterministic query helper extracts likely identifiers/modules and search intent before retrieval; it never generates factual answers.",
       annotations: READ_ONLY,
       inputSchema: z.object({
         query: z.string().trim().min(1).max(500).describe("Exact Bedrock identifier or natural-language developer question"),
@@ -147,6 +172,7 @@ export function registerKnowledgeTools(
       }),
       outputSchema: z.object({
         query: z.string(),
+        helper: helperSchema,
         results: z.array(searchResultSchema),
         truncated: z.boolean(),
         totalChars: z.number().int(),
@@ -154,8 +180,9 @@ export function registerKnowledgeTools(
     },
     async (args) => {
       try {
+        const helper = planBedrockQuery(args.query);
         const options: KnowledgeSearchOptions = {
-          query: args.query,
+          query: helper.recommendedTool === "get_definition" ? helper.searchQuery : args.query,
           ...(args.limit !== undefined ? { limit: args.limit } : {}),
           ...(args.kinds !== undefined ? { kinds: args.kinds } : {}),
           ...(args.categories !== undefined ? { categories: args.categories } : {}),
@@ -163,18 +190,19 @@ export function registerKnowledgeTools(
           ...(args.sourceTiers !== undefined ? { sourceTiers: args.sourceTiers } : {}),
           ...(args.source !== undefined ? { sourceId: args.source } : {}),
           ...(args.channel !== undefined ? { channel: args.channel } : {}),
-          ...(args.module !== undefined ? { apiPackage: args.module } : {}),
+          ...((args.module ?? helper.module) !== undefined ? { apiPackage: args.module ?? helper.module } : {}),
           ...(args.pathPrefix !== undefined ? { pathPrefix: args.pathPrefix } : {}),
           ...(args.minecraftVersion !== undefined ? { minecraftVersion: args.minecraftVersion } : {}),
           ...(args.apiVersion !== undefined ? { apiVersion: args.apiVersion } : {}),
-          ...(args.includePreview !== undefined ? { includePreview: args.includePreview } : {}),
+          ...((args.includePreview ?? helper.includePreview) !== undefined ? { includePreview: args.includePreview ?? helper.includePreview } : {}),
           ...(args.includeHistorical !== undefined ? { includeHistorical: args.includeHistorical } : {}),
           ...(args.maxChars !== undefined ? { maxChars: args.maxChars } : {}),
         };
         const db = requireDatabase(database);
-        return textResult(semantic
+        const result = semantic
           ? await hybridSearchKnowledge(db, semantic, options, semanticTopK)
-          : searchKnowledge(db, options));
+          : searchKnowledge(db, options);
+        return textResult({ ...result, query: args.query, helper });
       } catch (error) {
         return toolError(error);
       }
@@ -248,16 +276,18 @@ export function registerKnowledgeTools(
     "get_definition",
     {
       title: "Get Bedrock definition",
-      description: "Look up an exact Bedrock component or Script API identifier. Returns at most three version-aware definitions plus up to two relevant code/example chunks when indexed.",
+      description: "Look up a Bedrock component or Script API identifier. The deterministic helper can extract an exact identifier from a short definition question before lookup; no model-generated answer is produced.",
       annotations: READ_ONLY,
       inputSchema: z.object({
-        identifier: z.string().trim().min(1).max(250),
+        identifier: z.string().trim().min(1).max(250).describe("Exact identifier or a short question containing one identifier"),
         minecraftVersion: z.string().min(1).max(50).optional(),
         apiVersion: z.string().min(1).max(50).optional(),
         includePreview: z.boolean().optional(),
         includeHistorical: z.boolean().optional(),
       }),
       outputSchema: z.object({
+        requestedIdentifier: z.string(),
+        helper: helperSchema,
         identifier: z.string(),
         definitions: z.array(definitionSchema).max(3),
         examples: z.array(definitionExampleSchema).max(2),
@@ -267,13 +297,16 @@ export function registerKnowledgeTools(
     },
     async (args) => {
       try {
-        return textResult(getDefinition(requireDatabase(database), {
-          identifier: args.identifier,
+        const helper = planBedrockQuery(args.identifier);
+        const resolvedIdentifier = helper.identifiers[0] ?? helper.normalizedQuery;
+        const result = getDefinition(requireDatabase(database), {
+          identifier: resolvedIdentifier,
           ...(args.minecraftVersion !== undefined ? { minecraftVersion: args.minecraftVersion } : {}),
           ...(args.apiVersion !== undefined ? { apiVersion: args.apiVersion } : {}),
-          ...(args.includePreview !== undefined ? { includePreview: args.includePreview } : {}),
+          ...((args.includePreview ?? helper.includePreview) !== undefined ? { includePreview: args.includePreview ?? helper.includePreview } : {}),
           ...(args.includeHistorical !== undefined ? { includeHistorical: args.includeHistorical } : {}),
-        }));
+        });
+        return textResult({ requestedIdentifier: args.identifier, helper, ...result });
       } catch (error) {
         return toolError(error);
       }
@@ -337,81 +370,16 @@ export function registerKnowledgeTools(
   );
 
   server.registerTool(
-    "ask_bedrock",
+    "plan_lookup",
     {
-      title: "Ask the local Bedrock helper",
-      description: "Answer a Minecraft Bedrock development question with an optional local Qwen model grounded in indexed documentation. Returns the exact resources and citations used; it never calls a hosted AI service.",
+      title: "Plan a Bedrock lookup",
+      description: "Deterministically inspect a Bedrock development question and report what it appears to be looking for, including identifier/module candidates and the best next retrieval tool. This helper does not generate Minecraft facts or answers.",
       annotations: READ_ONLY,
       inputSchema: z.object({
-        query: z.string().trim().min(1).max(500).describe("Bedrock development question to answer from indexed evidence"),
-        limit: z.number().int().min(1).max(8).optional().describe("Maximum indexed resources to give the local model"),
-        kinds: z.array(kindSchema).max(10).optional(),
-        categories: z.array(z.string().min(1).max(100)).max(10).optional(),
-        stabilities: z.array(stabilitySchema).max(5).optional(),
-        sourceTiers: z.array(z.number().int().min(1).max(4)).max(4).optional(),
-        source: z.string().trim().min(1).max(100).optional().describe("Exact indexed source id from list_sources"),
-        channel: channelSchema.optional(),
-        module: z.string().trim().min(1).max(100).optional().describe("Exact Script API package/module name, for example @minecraft/server"),
-        pathPrefix: z.string().trim().min(1).max(500).optional(),
-        minecraftVersion: z.string().min(1).max(50).optional(),
-        apiVersion: z.string().min(1).max(50).optional(),
-        includePreview: z.boolean().optional(),
-        includeHistorical: z.boolean().optional(),
+        query: z.string().trim().min(1).max(500),
       }),
-      outputSchema: z.object({
-        query: z.string(),
-        answer: z.string(),
-        model: z.string(),
-        resources: z.array(searchResultSchema).max(8),
-        citations: z.array(z.object({
-          id: z.string(),
-          chunkId: z.string(),
-          documentId: z.string(),
-          title: z.string(),
-          path: z.string(),
-          sourceId: z.string(),
-          sourceName: z.string(),
-          channel: z.string(),
-          sourceTier: z.number().int(),
-          canonicalUrl: z.string().optional(),
-        })).max(8),
-        candidateCount: z.number().int(),
-        grounded: z.boolean(),
-        warning: z.string().optional(),
-      }),
+      outputSchema: helperSchema,
     },
-    async (args) => {
-      try {
-        if (!localLlm) {
-          throw new Error("LOCAL_LLM_DISABLED: set BEDROCK_MCP_LOCAL_LLM_ENABLED=true; llama-server is started and the model is downloaded automatically when the server starts");
-        }
-        const options: KnowledgeSearchOptions = {
-          query: args.query,
-          ...(args.limit !== undefined ? { limit: args.limit } : {}),
-          ...(args.kinds !== undefined ? { kinds: args.kinds } : {}),
-          ...(args.categories !== undefined ? { categories: args.categories } : {}),
-          ...(args.stabilities !== undefined ? { stabilities: args.stabilities } : {}),
-          ...(args.sourceTiers !== undefined ? { sourceTiers: args.sourceTiers } : {}),
-          ...(args.source !== undefined ? { sourceId: args.source } : {}),
-          ...(args.channel !== undefined ? { channel: args.channel } : {}),
-          ...(args.module !== undefined ? { apiPackage: args.module } : {}),
-          ...(args.pathPrefix !== undefined ? { pathPrefix: args.pathPrefix } : {}),
-          ...(args.minecraftVersion !== undefined ? { minecraftVersion: args.minecraftVersion } : {}),
-          ...(args.apiVersion !== undefined ? { apiVersion: args.apiVersion } : {}),
-          ...(args.includePreview !== undefined ? { includePreview: args.includePreview } : {}),
-          ...(args.includeHistorical !== undefined ? { includeHistorical: args.includeHistorical } : {}),
-        };
-        const db = requireDatabase(database);
-        return textResult(await answerBedrock({
-          llm: localLlm,
-          retrievalLimit: localLlmRetrievalLimit,
-          search: (searchOptions) => semantic
-            ? hybridSearchKnowledge(db, semantic, searchOptions, semanticTopK)
-            : searchKnowledge(db, searchOptions),
-        }, options));
-      } catch (error) {
-        return toolError(error);
-      }
-    },
+    async (args) => textResult(planBedrockQuery(args.query)),
   );
 }
