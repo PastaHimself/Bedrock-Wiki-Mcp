@@ -125,6 +125,11 @@ export function localLlmServerArguments(
     "--ctx-size", String(contextSize),
     "--threads", String(threads),
     "--threads-batch", String(threads),
+    // llama-server otherwise sizes its HTTP pool from the host CPU count. On
+    // Pterodactyl this can exceed the container PID/thread limit before the
+    // model has even finished loading. The endpoint is loopback-only and the
+    // MCP runs one inference slot, so one HTTP worker is sufficient.
+    "--threads-http", "1",
     "--parallel", "1",
   ];
 }

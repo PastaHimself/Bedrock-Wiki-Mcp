@@ -21,6 +21,7 @@ describe("local llama-server startup", () => {
       "--ctx-size", "4096",
       "--threads", "2",
       "--threads-batch", "2",
+      "--threads-http", "1",
       "--parallel", "1",
     ]);
     expect(() => localLlmServerArguments(
@@ -99,7 +100,11 @@ describe("local llama-server startup", () => {
       expect(args).toContain("Qwen/Qwen3-1.7B-GGUF:Q8_0");
       expect(args).toContain("--host");
       expect(args).toContain("127.0.0.1");
-      expect(args).toEqual(expect.arrayContaining(["--threads", "4", "--threads-batch", "4"]));
+      expect(args).toEqual(expect.arrayContaining([
+        "--threads", "4",
+        "--threads-batch", "4",
+        "--threads-http", "1",
+      ]));
       expect(cacheEnvironment).toBe(cacheDir);
       expect(handle.startedByProcess).toBe(true);
 
