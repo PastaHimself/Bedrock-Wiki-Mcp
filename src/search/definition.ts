@@ -69,6 +69,10 @@ function isAllowed(hit: ExactIdentifierHit, options: DefinitionLookupOptions): b
   return versionAllowed(hit, options);
 }
 
+function definitionLike(hit: ExactIdentifierHit): boolean {
+  return !["code", "example"].includes(hit.kind);
+}
+
 function versionScore(hit: Pick<ExactIdentifierHit, "minecraftVersion" | "apiVersion">, options: DefinitionLookupOptions): number {
   return versionMatchScore(options.minecraftVersion, hit.minecraftVersion)
     + versionMatchScore(options.apiVersion, hit.apiVersion);
@@ -127,22 +131,31 @@ function examplesFor(database: DatabaseSync, identifier: string, options: Defini
   return examples;
 }
 
+function rankDefinitions(hits: readonly ExactIdentifierHit[], options: DefinitionLookupOptions): ExactIdentifierHit[] {
+  const allowed = hits.filter((hit) => isAllowed(hit, options));
+  const reference = allowed.filter(definitionLike);
+  const pool = reference.length > 0 ? reference : allowed;
+  return pool
+    .sort((a, b) => versionScore(b, options) - versionScore(a, options) || a.sourceTier - b.sourceTier)
+    .slice(0, 3);
+}
+
 export function getDefinition(database: DatabaseSync, options: DefinitionLookupOptions): DefinitionLookupResult {
   const identifier = options.identifier.trim();
   if (identifier.length < 1 || identifier.length > 250) throw new RangeError("identifier must contain 1 to 250 characters");
 
   const all = exactIdentifierSearch(database, identifier, 30);
-  let definitions = all
-    .filter((hit) => isAllowed(hit, options))
-    .sort((a, b) => versionScore(b, options) - versionScore(a, options) || a.sourceTier - b.sourceTier)
-    .slice(0, 3);
+  let definitions = rankDefinitions(all, options);
   const stableDefinitionFound = definitions.some((hit) => hit.channel === "stable" && hit.stability === "stable" && hit.lifecycle === "active");
 
   let warning: string | undefined;
   if (definitions.length === 0 && !(options.includePreview ?? false)) {
-    const previewFallback = all
+    const previewCandidates = all
       .filter((hit) => !["historical", "removed"].includes(hit.lifecycle))
-      .filter((hit) => versionAllowed(hit, options))
+      .filter((hit) => versionAllowed(hit, options));
+    const reference = previewCandidates.filter(definitionLike);
+    const pool = reference.length > 0 ? reference : previewCandidates;
+    const previewFallback = pool
       .sort((a, b) => versionScore(b, options) - versionScore(a, options) || a.sourceTier - b.sourceTier)
       .slice(0, 3);
     if (previewFallback.length > 0) {
