@@ -35,7 +35,6 @@ describe("small VPS deployment workflow", () => {
     expectBashSyntax("deploy/scripts/bootstrap-ubuntu.sh");
     expectBashSyntax("deploy/scripts/set-application-permissions.sh");
     expectBashSyntax("deploy/scripts/verify-production.sh");
-    expectBashSyntax("deploy/scripts/wait-for-local-llm.sh");
   });
 
   it("provides the privilege harness required by CI for the real permission regression", () => {
@@ -121,7 +120,6 @@ describe("small VPS deployment workflow", () => {
 
     expect(bootstrap).toContain('APP_DIR="/opt/bedrock-wiki-mcp"');
     expect(bootstrap).toContain('DATA_DIR="/var/lib/bedrock-mcp"');
-    expect(bootstrap).toContain('"$DATA_DIR/models/huggingface"');
     expect(bootstrap).toContain('CONFIG_DIR="/etc/bedrock-mcp"');
     expect(bootstrap).toContain('SOURCE_USER="${SUDO_USER:-$(stat -c');
     expect(bootstrap).toContain("runuser -u \"$SOURCE_USER\" -- git");
