@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   localLlmServerArguments,
   startLocalLlmServer,
+  tryStartLocalLlmServer,
   type LocalLlmChild,
 } from "../../src/ai/local-server.js";
 
@@ -94,5 +95,31 @@ describe("local llama-server startup", () => {
     } finally {
       await rm(parent, { recursive: true, force: true });
     }
+  });
+
+  it("does not make the MCP unavailable when the optional runtime is missing", async () => {
+    const warnings: string[] = [];
+    const child: LocalLlmChild = {
+      once: (event, listener) => {
+        if (event === "error") {
+          const onError = listener as (error: Error) => void;
+          queueMicrotask(() => onError(Object.assign(new Error("spawn llama-server ENOENT"), { code: "ENOENT" })));
+        }
+        return child;
+      },
+      kill: () => true,
+    };
+    const handle = await tryStartLocalLlmServer({
+      baseUrl: "http://127.0.0.1:8081/v1",
+      model: "Qwen/Qwen3-1.7B-GGUF:Q8_0",
+      cacheDir: join(tmpdir(), "bedrock-qwen-missing-runtime"),
+      startupTimeoutMs: 10_000,
+      fetchImpl: async () => new Response(null, { status: 503 }),
+      sleepImpl: async () => undefined,
+      spawnImpl: () => child,
+    }, (error) => warnings.push(error.message));
+
+    expect(handle).toBeUndefined();
+    expect(warnings[0]).toContain("LOCAL_LLM_UNAVAILABLE");
   });
 });

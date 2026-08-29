@@ -140,7 +140,7 @@ BEDROCK_MCP_LOCAL_LLM_MAX_TOKENS=512
 BEDROCK_MCP_LOCAL_LLM_RETRIEVAL_LIMIT=6
 ~~~
 
-The helper uses `/no_think` for normal lookup questions, limits evidence to six resources/2,000 characters so it fits the 4K model context with generation space, rejects overlapping local generations, and reports a clear error if the local endpoint is disabled or unavailable. Keep port 8081 private; only expose the MCP endpoint through your normal reverse proxy. Set `BEDROCK_MCP_LOCAL_LLM_ENABLED=false` if you want to run the MCP without local inference.
+The helper uses `/no_think` for normal lookup questions, limits evidence to six resources/2,000 characters so it fits the 4K model context with generation space, rejects overlapping local generations, and reports a clear error if the local endpoint is disabled or unavailable. If `llama-server` is missing or cannot load the model, the MCP stays online with deterministic tools available and `ask_bedrock` reports the local-runtime error. Keep port 8081 private; only expose the MCP endpoint through your normal reverse proxy. Set `BEDROCK_MCP_LOCAL_LLM_ENABLED=false` if you want to run the MCP without local inference.
 
 ## Knowledge sources
 

@@ -5,7 +5,7 @@ import { createBackup } from "./admin/backup.js";
 import { formatBenchmarkSummary, loadBenchmarkSuite, runBenchmark } from "./admin/benchmark.js";
 import { formatIndexStatus, readIndexStatus } from "./admin/status.js";
 import { LocalLlmClient } from "./ai/local-llm.js";
-import { startLocalLlmServer, type LocalLlmServerHandle } from "./ai/local-server.js";
+import { tryStartLocalLlmServer, type LocalLlmServerHandle } from "./ai/local-server.js";
 import { loadRuntimeConfig } from "./config.js";
 import { MCP_PATH, SERVICE_NAME, SERVICE_VERSION } from "./constants.js";
 import { openDatabase } from "./db/connection.js";
@@ -303,12 +303,16 @@ async function serve(): Promise<number> {
   let server: ReturnType<typeof createHttpServer> | undefined;
   try {
     if (config.localLlmEnabled) {
-      localLlmProcess = await startLocalLlmServer({
+      localLlmProcess = await tryStartLocalLlmServer({
         baseUrl: config.localLlmBaseUrl,
         model: config.localLlmModel,
         binary: config.localLlmBinary,
         cacheDir: localLlmCachePath(config.dataDir),
         startupTimeoutMs: config.localLlmStartupTimeoutMs,
+      }, (error) => {
+        process.stderr.write(
+          `Local Qwen helper unavailable; the MCP will continue without local answers: ${error.message}\n`,
+        );
       });
     }
     const localLlm = config.localLlmEnabled
