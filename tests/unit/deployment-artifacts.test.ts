@@ -17,6 +17,25 @@ describe("production deployment artifacts", () => {
     expect(unit).not.toContain("0.0.0.0");
   });
 
+  it("provides an optional supervised loopback Qwen service with persistent cache", async () => {
+    const unit = await text("deploy/systemd/bedrock-qwen.service");
+    expect(unit).toContain("User=bedrock-mcp");
+    expect(unit).toContain("Environment=HF_HOME=/var/lib/bedrock-mcp/huggingface");
+    expect(unit).toContain("-hf Qwen/Qwen3-1.7B-GGUF:Q8_0");
+    expect(unit).toContain("--host 127.0.0.1");
+    expect(unit).toContain("--ctx-size 4096");
+    expect(unit).toContain("--parallel 1");
+    expect(unit).toContain("ExecStartPost=/usr/bin/bash /opt/bedrock-wiki-mcp/deploy/scripts/wait-for-local-llm.sh");
+    expect(unit).toContain("Restart=on-failure");
+    expect(unit).toContain("ReadWritePaths=/var/lib/bedrock-mcp/huggingface");
+    expect(unit).not.toContain("0.0.0.0");
+
+    const readiness = await text("deploy/scripts/wait-for-local-llm.sh");
+    expect(readiness).toContain("curl --fail --silent");
+    expect(readiness).toContain("/health");
+    expect(readiness).toContain("Timed out");
+  });
+
   it("backs up, refreshes lexical/semantic knowledge, then restarts the server", async () => {
     const script = await text("deploy/scripts/update-knowledge.sh");
     const backup = script.indexOf("dist/index.js backup");

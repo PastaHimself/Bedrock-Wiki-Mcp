@@ -6,6 +6,7 @@ import {
   formatGroundedEvidence,
   MAX_GROUNDED_EVIDENCE_CHARS,
   type GroundedCitation,
+  unknownCitationIds,
 } from "./grounded-answer.js";
 import type {
   KnowledgeSearchOptions,
@@ -26,6 +27,8 @@ export interface BedrockAnswerResponse {
   readonly resources: readonly KnowledgeSearchResult[];
   readonly citations: readonly GroundedCitation[];
   readonly candidateCount: number;
+  readonly grounded: boolean;
+  readonly warning?: string;
 }
 
 export async function answerBedrock(
@@ -50,6 +53,8 @@ export async function answerBedrock(
       resources,
       citations: [],
       candidateCount: 0,
+      grounded: false,
+      warning: "No indexed resources were found; no model-grounded answer was generated.",
     };
   }
 
@@ -60,12 +65,22 @@ export async function answerBedrock(
   }));
   if (!generated) throw new Error("LOCAL_LLM_INVALID_RESPONSE: local model returned an empty answer");
 
+  const citations = citationsInAnswer(generated, evidence.citations);
+  const unknownIds = unknownCitationIds(generated, evidence.citations);
+  const warning = unknownIds.length > 0
+    ? "The local model cited resource markers not supplied in the evidence: " + unknownIds.join(", ") + "."
+    : citations.length === 0
+      ? "The local model returned no valid resource citations."
+      : undefined;
+
   return {
     query: retrieval.query,
     answer: generated,
     model: dependencies.llm.model,
     resources,
-    citations: citationsInAnswer(generated, evidence.citations),
+    citations,
     candidateCount: resources.length,
+    grounded: citations.length > 0 && unknownIds.length === 0,
+    ...(warning ? { warning } : {}),
   };
 }

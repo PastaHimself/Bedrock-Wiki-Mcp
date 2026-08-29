@@ -8,6 +8,17 @@ function fakeResponse(body: unknown, status = 200): Response {
   });
 }
 
+function oversizedStreamingResponse(): Response {
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new Uint8Array(1_500_000));
+      controller.enqueue(new Uint8Array(500_001));
+      controller.close();
+    },
+  });
+  return new Response(body, { status: 200 });
+}
+
 describe("LocalLlmClient", () => {
   it("serializes a bounded OpenAI-compatible chat request and returns the answer", async () => {
     let requestUrl = "";
@@ -82,5 +93,52 @@ describe("LocalLlmClient", () => {
     });
     await expect(malformed.chat({ messages: [{ role: "user", content: "question" }] }))
       .rejects.toMatchObject({ code: "LOCAL_LLM_INVALID_RESPONSE" });
+  });
+
+  it("stops reading an oversized streamed response at the byte limit", async () => {
+    const client = new LocalLlmClient({
+      baseUrl: "http://127.0.0.1:8081/v1",
+      model: "qwen",
+      timeoutMs: 1000,
+      maxTokens: 64,
+      fetchImpl: async () => oversizedStreamingResponse(),
+    });
+
+    await expect(client.chat({ messages: [{ role: "user", content: "question" }] }))
+      .rejects.toMatchObject({ code: "LOCAL_LLM_INVALID_RESPONSE" });
+  });
+
+  it("allows one queued generation and rejects additional concurrent work", async () => {
+    let calls = 0;
+    let startFirst!: () => void;
+    let releaseFirst!: () => void;
+    const firstStarted = new Promise<void>((resolve) => { startFirst = resolve; });
+    const firstRelease = new Promise<void>((resolve) => { releaseFirst = resolve; });
+    const client = new LocalLlmClient({
+      baseUrl: "http://127.0.0.1:8081/v1",
+      model: "qwen",
+      timeoutMs: 2000,
+      maxTokens: 64,
+      fetchImpl: async () => {
+        calls += 1;
+        if (calls === 1) {
+          startFirst();
+          await firstRelease;
+        }
+        return fakeResponse({ choices: [{ message: { content: "Use [R1]." } }] });
+      },
+    });
+
+    const request = { messages: [{ role: "user" as const, content: "question" }] };
+    const first = client.chat(request);
+    await firstStarted;
+    const second = client.chat(request);
+    const third = client.chat(request);
+
+    await expect(third).rejects.toMatchObject({ code: "LOCAL_LLM_BUSY" });
+    releaseFirst();
+    await expect(first).resolves.toBe("Use [R1].");
+    await expect(second).resolves.toBe("Use [R1].");
+    expect(calls).toBe(2);
   });
 });

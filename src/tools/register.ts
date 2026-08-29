@@ -376,6 +376,8 @@ export function registerKnowledgeTools(
           canonicalUrl: z.string().optional(),
         })).max(8),
         candidateCount: z.number().int(),
+        grounded: z.boolean(),
+        warning: z.string().optional(),
       }),
     },
     async (args) => {

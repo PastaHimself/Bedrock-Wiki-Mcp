@@ -46,6 +46,11 @@ describe("grounded Bedrock answers", () => {
     expect(messages[1]?.content).toContain("[R1]");
   });
 
+  it("keeps the evidence payload within the small-model context budget", () => {
+    const evidence = formatGroundedEvidence([result({ excerpt: "x".repeat(9_000) })], 8_000);
+    expect(evidence.text.length).toBeLessThanOrEqual(8_000);
+  });
+
   it("removes Qwen thinking markers from the user-facing answer", () => {
     expect(cleanGeneratedAnswer("<think>private reasoning</think>Use [R1]."))
       .toBe("Use [R1].");
@@ -74,8 +79,35 @@ describe("grounded Bedrock answers", () => {
       answer: "Subscribe to the event [R1].",
       model: "Qwen/Qwen3-1.7B-GGUF:Q8_0",
       candidateCount: 1,
+      grounded: true,
     });
     expect(output.citations).toEqual([expect.objectContaining({ id: "R1", chunkId: "chk_input" })]);
+  });
+
+  it("flags answers with unavailable or missing citations instead of presenting them as grounded", async () => {
+    const resource = result();
+    const unknownCitation = await answerBedrock({
+      retrievalLimit: 2,
+      search: async () => ({ query: "question", results: [resource], truncated: false, totalChars: resource.excerpt.length }),
+      llm: {
+        model: "qwen",
+        chat: async () => "Use [R99].",
+      },
+    }, { query: "question" });
+    expect(unknownCitation.grounded).toBe(false);
+    expect(unknownCitation.citations).toEqual([]);
+    expect(unknownCitation.warning).toContain("R99");
+
+    const missingCitation = await answerBedrock({
+      retrievalLimit: 2,
+      search: async () => ({ query: "question", results: [resource], truncated: false, totalChars: resource.excerpt.length }),
+      llm: {
+        model: "qwen",
+        chat: async () => "I cannot determine that from the supplied material.",
+      },
+    }, { query: "question" });
+    expect(missingCitation.grounded).toBe(false);
+    expect(missingCitation.warning).toContain("no valid resource citations");
   });
 
   it("does not ask the model to answer when retrieval has no evidence", async () => {
@@ -95,5 +127,7 @@ describe("grounded Bedrock answers", () => {
     expect(modelCalled).toBe(false);
     expect(output.answer).toContain("could not find supporting");
     expect(output.candidateCount).toBe(0);
+    expect(output.grounded).toBe(false);
+    expect(output.warning).toContain("No indexed resources");
   });
 });

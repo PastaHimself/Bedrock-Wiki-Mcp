@@ -34,7 +34,7 @@ The default model is `Qwen/Qwen3-1.7B-GGUF`, served by `llama-server` with the o
 3. Format each result as bounded, labelled evidence with a stable reference ID.
 4. Send a prompt that requires the model to use only that evidence and cite factual claims.
 5. Remove any Qwen thinking markers, bound the answer, and parse cited reference IDs.
-6. Return the answer, model name, evidence resources, and citation mappings as MCP structured content.
+6. Return the answer, model name, evidence resources, citation mappings, and a grounded/warning status as MCP structured content.
 
 The local model client is an adapter boundary. The server does not need to know whether the endpoint is backed by Qwen, another GGUF model, or a test double, but production configuration defaults to Qwen3.
 
@@ -58,12 +58,14 @@ The tool is always registered so MCP clients can discover it. When local inferen
 
 The system prompt identifies indexed text as untrusted evidence and tells the model to ignore instructions contained inside it. The answer prompt requires concise responses, citations for factual claims, and an explicit statement when the evidence is insufficient. The model receives excerpts and provenance, not arbitrary filesystem paths or user-controlled tool instructions.
 
+A response is marked `grounded` only when it cites at least one supplied resource and does not cite an unavailable reference marker. Missing or unknown citations remain visible in the answer but produce a warning for the caller.
+
 The endpoint is configured for loopback by default (`127.0.0.1:8081`). The application only sends requests to the configured local endpoint; operators should not bind llama-server to a public interface.
 
 ## Resource budget
 
 - Default model: official Qwen3 1.7B `Q8_0` GGUF, about 1.83 GB on disk.
-- Default context sent by the helper: at most six results and 18,000 evidence characters.
+- Default context sent by the helper: at most six results and 8,000 evidence characters, leaving room for instructions and the 512-token answer inside a 4K context.
 - Default generation: 512 tokens, 60-second timeout, one request at a time recommended by the deployment documentation.
 - Normal lookup prompts should include `/no_think` to avoid spending the small CPU/RAM budget on visible reasoning text.
 
@@ -82,11 +84,11 @@ The following environment variables are added:
 | `BEDROCK_MCP_LOCAL_LLM_MAX_TOKENS` | `512` | Maximum generated tokens. |
 | `BEDROCK_MCP_LOCAL_LLM_RETRIEVAL_LIMIT` | `6` | Maximum evidence resources supplied to Qwen. |
 
-The application does not start or download llama-server itself. Operators start the local model server separately, which keeps model-process lifecycle and model-cache ownership explicit.
+The application does not start or download llama-server itself. Operators start the local model server separately, which keeps model-process lifecycle and model-cache ownership explicit. `LocalLlmClient` permits one active generation and one queued request; additional concurrent helper calls receive a retryable busy error.
 
 ## Verification
 
 - Unit tests cover configuration defaults/validation, request serialization, timeout and malformed responses, prompt grounding/citation formatting, and tool registration.
 - Existing search, fetch, security, source, and semantic tests must remain green.
 - Typecheck and production build must pass.
-- Deployment documentation includes the exact Qwen launch command and loopback-only guidance.
+- Deployment documentation includes the exact Qwen launch command, loopback-only guidance, and an optional systemd unit with a readiness wait script and restart policy.

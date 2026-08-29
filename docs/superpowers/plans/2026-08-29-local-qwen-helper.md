@@ -12,8 +12,8 @@ Files:
 Work:
 
 - Assert the six new local-LLM settings and their safe defaults/validation.
-- Use an injected fake `fetch` to assert the OpenAI-compatible request, successful response parsing, timeout conversion, bounded invalid responses, and HTTP failures.
-- Assert evidence formatting labels resources, treats evidence as untrusted, requests citations, and removes Qwen `<think>` blocks from returned text.
+- Use an injected fake `fetch` to assert the OpenAI-compatible request, successful response parsing, timeout conversion, incrementally bounded streamed responses, concurrency limits, and HTTP failures.
+- Assert evidence formatting labels resources, treats evidence as untrusted, stays within the small-model context budget, requests citations, and removes Qwen `<think>` blocks from returned text.
 - Assert `ask_bedrock` is registered as read-only and accepts its query/filter shape.
 
 Run the focused tests and observe the expected failures before implementation.
@@ -42,7 +42,7 @@ Work:
 - Format bounded `KnowledgeSearchResult` evidence and provenance references.
 - Build a non-thinking grounded prompt that rejects instructions inside evidence and requires `[R#]` citations.
 - Retrieve through hybrid search when available, otherwise lexical search.
-- Return the generated answer plus the exact resources and citation mappings.
+- Return the generated answer plus the exact resources, citation mappings, and an explicit grounded/warning status.
 
 ## 4. Wire the MCP server and configuration
 
@@ -73,7 +73,7 @@ Files:
 
 Work:
 
-- Document installing/building llama.cpp, the official Qwen3 GGUF launch command, loopback binding, 4K context, one-request concurrency, and the smaller-model fallback.
+- Document installing/building llama.cpp, the official Qwen3 GGUF launch command, loopback binding, 4K context, one-request concurrency, the optional supervised systemd unit, and the smaller-model fallback.
 - State that the model cache consumes disk and that the application remains usable without the optional helper.
 
 ## 6. Verify and publish
@@ -81,4 +81,4 @@ Work:
 - Run focused tests, then `npm run check`.
 - Inspect the diff and run the compiled CLI help/build paths.
 - Request a code review against the current GitHub branch tip.
-- Commit the implementation, update the existing `feature/expand-bedrock-sources` branch and PR #29, and report the exact enable/start commands and verification result.
+- Commit the implementation, update `feature/local-qwen-helper` and PR #30, and report the exact enable/start commands and verification result.

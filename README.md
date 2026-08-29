@@ -138,7 +138,7 @@ BEDROCK_MCP_LOCAL_LLM_MAX_TOKENS=512
 BEDROCK_MCP_LOCAL_LLM_RETRIEVAL_LIMIT=6
 ~~~
 
-Start `llama-server` before the MCP process. The helper uses `/no_think` for normal lookup questions, limits evidence to six resources/18,000 characters, and reports a clear error if the local endpoint is disabled or unavailable. Keep port 8081 private; only expose the MCP endpoint through your normal reverse proxy.
+Start `llama-server` before the MCP process. The helper uses `/no_think` for normal lookup questions, limits evidence to six resources/8,000 characters so it fits the 4K model context with generation space, and reports a clear error if the local endpoint is disabled or unavailable. Keep port 8081 private; only expose the MCP endpoint through your normal reverse proxy.
 
 ## Knowledge sources
 

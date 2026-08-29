@@ -1,7 +1,7 @@
 import type { LocalLlmMessage } from "./local-llm.js";
 import type { KnowledgeSearchResult } from "../search/engine.js";
 
-export const MAX_GROUNDED_EVIDENCE_CHARS = 18_000;
+export const MAX_GROUNDED_EVIDENCE_CHARS = 8_000;
 const MAX_GENERATED_ANSWER_CHARS = 12_000;
 
 export interface GroundedCitation {
@@ -113,8 +113,20 @@ export function citationsInAnswer(
   answer: string,
   citations: readonly GroundedCitation[],
 ): GroundedCitation[] {
-  const citedIds = new Set(
-    [...answer.matchAll(/\[R(\d{1,2})\]/g)].map((match) => "R" + match[1]),
-  );
+  const citedIds = new Set(citationIdsInAnswer(answer));
   return citations.filter((citation) => citedIds.has(citation.id));
+}
+
+export function citationIdsInAnswer(answer: string): string[] {
+  return [...new Set(
+    [...answer.matchAll(/\[R(\d+)\]/g)].map((match) => "R" + Number(match[1])),
+  )];
+}
+
+export function unknownCitationIds(
+  answer: string,
+  citations: readonly GroundedCitation[],
+): string[] {
+  const knownIds = new Set(citations.map((citation) => citation.id));
+  return citationIdsInAnswer(answer).filter((id) => !knownIds.has(id));
 }

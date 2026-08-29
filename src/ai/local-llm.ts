@@ -1,6 +1,6 @@
 import { z } from "zod/v4";
 
-const MAX_RESPONSE_CHARS = 2_000_000;
+const MAX_RESPONSE_BYTES = 2_000_000;
 
 const chatResponseSchema = z.object({
   choices: z.array(z.object({
@@ -15,7 +15,8 @@ export type LocalLlmErrorCode =
   | "LOCAL_LLM_TIMEOUT"
   | "LOCAL_LLM_UNAVAILABLE"
   | "LOCAL_LLM_HTTP_ERROR"
-  | "LOCAL_LLM_INVALID_RESPONSE";
+  | "LOCAL_LLM_INVALID_RESPONSE"
+  | "LOCAL_LLM_BUSY";
 
 export class LocalLlmError extends Error {
   readonly code: LocalLlmErrorCode;
@@ -66,6 +67,37 @@ function responseDetail(body: string): string {
   return body.replace(/\s+/g, " ").trim().slice(0, 240);
 }
 
+async function readBoundedResponseBody(response: Response): Promise<string> {
+  const reader = response.body?.getReader();
+  if (!reader) {
+    const body = await response.text();
+    if (new TextEncoder().encode(body).byteLength > MAX_RESPONSE_BYTES) {
+      throw new LocalLlmError("LOCAL_LLM_INVALID_RESPONSE", "local model response exceeded the size limit");
+    }
+    return body;
+  }
+
+  const decoder = new TextDecoder();
+  const chunks: string[] = [];
+  let receivedBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      receivedBytes += value.byteLength;
+      if (receivedBytes > MAX_RESPONSE_BYTES) {
+        await reader.cancel().catch(() => undefined);
+        throw new LocalLlmError("LOCAL_LLM_INVALID_RESPONSE", "local model response exceeded the size limit");
+      }
+      chunks.push(decoder.decode(value, { stream: true }));
+    }
+    chunks.push(decoder.decode());
+    return chunks.join("");
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 export class LocalLlmClient implements LocalLlm {
   readonly model: string;
 
@@ -73,6 +105,8 @@ export class LocalLlmClient implements LocalLlm {
   private readonly timeoutMs: number;
   private readonly maxTokens: number;
   private readonly fetchImpl: typeof fetch;
+  private activeRequests = 0;
+  private readonly pendingRequests: Array<() => void> = [];
 
   constructor(options: LocalLlmClientOptions) {
     if (!isLoopbackLlmBaseUrl(options.baseUrl)) {
@@ -95,6 +129,28 @@ export class LocalLlmClient implements LocalLlm {
     this.fetchImpl = options.fetchImpl ?? fetch;
   }
 
+  private async acquireSlot(): Promise<() => void> {
+    if (this.activeRequests === 0) {
+      this.activeRequests = 1;
+      return () => this.releaseSlot();
+    }
+    if (this.pendingRequests.length >= 1) {
+      throw new LocalLlmError("LOCAL_LLM_BUSY", "local model is already processing a request; retry shortly");
+    }
+
+    await new Promise<void>((resolve) => this.pendingRequests.push(resolve));
+    return () => this.releaseSlot();
+  }
+
+  private releaseSlot(): void {
+    const next = this.pendingRequests.shift();
+    if (next) {
+      next();
+    } else {
+      this.activeRequests = 0;
+    }
+  }
+
   async chat(request: LocalLlmChatRequest): Promise<string> {
     if (request.messages.length === 0) {
       throw new LocalLlmError("LOCAL_LLM_INVALID_REQUEST", "at least one message is required");
@@ -108,6 +164,19 @@ export class LocalLlmClient implements LocalLlm {
       throw new LocalLlmError("LOCAL_LLM_INVALID_REQUEST", "maxTokens must be between 1 and " + this.maxTokens);
     }
 
+    const release = await this.acquireSlot();
+    try {
+      return await this.chatOnce(request, temperature, maxTokens);
+    } finally {
+      release();
+    }
+  }
+
+  private async chatOnce(
+    request: LocalLlmChatRequest,
+    temperature: number,
+    maxTokens: number,
+  ): Promise<string> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
     let response: Response;
@@ -135,17 +204,15 @@ export class LocalLlmClient implements LocalLlm {
 
     let body: string;
     try {
-      body = await response.text();
-    } catch {
+      body = await readBoundedResponseBody(response);
+    } catch (error) {
+      if (error instanceof LocalLlmError) throw error;
       if (controller.signal.aborted) {
         throw new LocalLlmError("LOCAL_LLM_TIMEOUT", "model response exceeded " + this.timeoutMs + "ms");
       }
       throw new LocalLlmError("LOCAL_LLM_INVALID_RESPONSE", "could not read the local model response");
     } finally {
       clearTimeout(timeout);
-    }
-    if (body.length > MAX_RESPONSE_CHARS) {
-      throw new LocalLlmError("LOCAL_LLM_INVALID_RESPONSE", "local model response exceeded the size limit");
     }
     if (!response.ok) {
       const detail = responseDetail(body);
