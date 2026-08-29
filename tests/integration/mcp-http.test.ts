@@ -24,6 +24,7 @@ const config: AppConfig = {
   localLlmBaseUrl: "http://127.0.0.1:8081/v1",
   localLlmBinary: "llama-server",
   localLlmModel: "Qwen/Qwen3-1.7B-GGUF:Q8_0",
+  localLlmThreads: 2,
   localLlmStartupTimeoutMs: 900000,
   localLlmTimeoutMs: 60000,
   localLlmMaxTokens: 512,

@@ -17,6 +17,7 @@ export interface LocalLlmServerOptions {
   readonly binary?: string;
   readonly cacheDir: string;
   readonly contextSize?: number;
+  readonly threads?: number;
   readonly startupTimeoutMs: number;
   readonly fetchImpl?: typeof fetch;
   readonly spawnImpl?: (command: string, args: readonly string[], options: {
@@ -108,16 +109,22 @@ export function localLlmServerArguments(
   baseUrl: string,
   model: string,
   contextSize = 4_096,
+  threads = 2,
 ): readonly string[] {
   const { host, port } = serverAddress(baseUrl);
   if (!Number.isSafeInteger(contextSize) || contextSize < 1_024 || contextSize > 32_768) {
     throw new LocalLlmError("LOCAL_LLM_INVALID_REQUEST", "contextSize must be between 1024 and 32768");
+  }
+  if (!Number.isSafeInteger(threads) || threads < 1 || threads > 32) {
+    throw new LocalLlmError("LOCAL_LLM_INVALID_REQUEST", "threads must be between 1 and 32");
   }
   return [
     "-hf", model,
     "--host", host,
     "--port", port,
     "--ctx-size", String(contextSize),
+    "--threads", String(threads),
+    "--threads-batch", String(threads),
     "--parallel", "1",
   ];
 }
@@ -137,7 +144,7 @@ export async function startLocalLlmServer(options: LocalLlmServerOptions): Promi
 
   await mkdir(options.cacheDir, { recursive: true });
   const command = options.binary?.trim() || "llama-server";
-  const args = localLlmServerArguments(options.baseUrl, options.model, options.contextSize);
+  const args = localLlmServerArguments(options.baseUrl, options.model, options.contextSize, options.threads);
   let child: LocalLlmChild;
   try {
     child = (options.spawnImpl ?? defaultSpawn)(command, args, {

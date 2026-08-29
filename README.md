@@ -122,6 +122,8 @@ llama-server \
   --host 127.0.0.1 \
   --port 8081 \
   --ctx-size 4096 \
+  --threads 2 \
+  --threads-batch 2 \
   --parallel 1
 ~~~
 
@@ -134,6 +136,8 @@ BEDROCK_MCP_LOCAL_LLM_ENABLED=true
 BEDROCK_MCP_LOCAL_LLM_BASE_URL=http://127.0.0.1:8081/v1
 BEDROCK_MCP_LOCAL_LLM_BINARY=llama-server
 BEDROCK_MCP_LOCAL_LLM_MODEL=Qwen/Qwen3-1.7B-GGUF:Q8_0
+# Use 1 on hosts with strict process/thread limits.
+BEDROCK_MCP_LOCAL_LLM_THREADS=2
 BEDROCK_MCP_LOCAL_LLM_STARTUP_TIMEOUT_MS=900000
 BEDROCK_MCP_LOCAL_LLM_TIMEOUT_MS=60000
 BEDROCK_MCP_LOCAL_LLM_MAX_TOKENS=512

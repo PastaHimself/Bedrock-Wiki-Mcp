@@ -88,6 +88,7 @@ BEDROCK_MCP_LOCAL_LLM_ENABLED=true
 BEDROCK_MCP_LOCAL_LLM_BASE_URL=http://127.0.0.1:8081/v1
 BEDROCK_MCP_LOCAL_LLM_BINARY=/usr/local/bin/llama-server
 BEDROCK_MCP_LOCAL_LLM_MODEL=Qwen/Qwen3-1.7B-GGUF:Q8_0
+BEDROCK_MCP_LOCAL_LLM_THREADS=2
 BEDROCK_MCP_LOCAL_LLM_STARTUP_TIMEOUT_MS=900000
 BEDROCK_MCP_LOCAL_LLM_TIMEOUT_MS=60000
 BEDROCK_MCP_LOCAL_LLM_MAX_TOKENS=512
@@ -111,7 +112,7 @@ Requires=bedrock-qwen.service
 After=bedrock-qwen.service
 ~~~
 
-The Q8 model is about 1.83 GB on disk; on a 3 GiB VPS, use `--ctx-size 4096` and `--parallel 1`, measure peak RSS, and switch to a smaller Qwen3 quantization or Qwen3 0.6B if the processes do not fit together. The MCP server remains usable with the helper disabled. If using the separate unit, check it with `systemctl status bedrock-qwen.service` and `journalctl -u bedrock-qwen.service -n 200 --no-pager`.
+The Q8 model is about 1.83 GB on disk; on a 3 GiB VPS, use `--ctx-size 4096`, `--threads 2`, `--threads-batch 2`, and `--parallel 1`, measure peak RSS, and switch to a smaller Qwen3 quantization or Qwen3 0.6B if the processes do not fit together. Set `BEDROCK_MCP_LOCAL_LLM_THREADS=1` in `/etc/bedrock-mcp/bedrock-mcp.env` when the host imposes stricter thread limits; both the Node-managed and separately supervised helpers read that value. The MCP server remains usable with the helper disabled. If using the separate unit, check it with `systemctl status bedrock-qwen.service` and `journalctl -u bedrock-qwen.service -n 200 --no-pager`.
 
 ## systemd
 
@@ -231,6 +232,7 @@ BEDROCK_MCP_SEMANTIC_ENABLED=false
 BEDROCK_MCP_LOCAL_LLM_ENABLED=true
 BEDROCK_MCP_LOCAL_LLM_BINARY=llama-server
 BEDROCK_MCP_LOCAL_LLM_MODEL=Qwen/Qwen3-1.7B-GGUF:Q8_0
+BEDROCK_MCP_LOCAL_LLM_THREADS=2
 ```
 
 Install/build during initial setup or an install script. Use normal `npm ci` when semantic retrieval is enabled:

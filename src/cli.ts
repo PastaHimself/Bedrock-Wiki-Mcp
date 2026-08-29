@@ -60,6 +60,7 @@ Environment:
   BEDROCK_MCP_LOCAL_LLM_BASE_URL       Loopback llama-server API (default: http://127.0.0.1:8081/v1)
   BEDROCK_MCP_LOCAL_LLM_BINARY          llama-server executable (default: llama-server)
   BEDROCK_MCP_LOCAL_LLM_MODEL          Model id (default: Qwen/Qwen3-1.7B-GGUF:Q8_0)
+  BEDROCK_MCP_LOCAL_LLM_THREADS        llama worker threads (default: 2; use 1 on stricter hosts)
   BEDROCK_MCP_LOCAL_LLM_STARTUP_TIMEOUT_MS Model download/startup timeout (default: 900000)
   BEDROCK_MCP_LOCAL_LLM_TIMEOUT_MS     Inference timeout in milliseconds (default: 60000)
   BEDROCK_MCP_LOCAL_LLM_MAX_TOKENS     Generation limit (default: 512; max: 512)
@@ -308,6 +309,7 @@ async function serve(): Promise<number> {
         model: config.localLlmModel,
         binary: config.localLlmBinary,
         cacheDir: localLlmCachePath(config.dataDir),
+        threads: config.localLlmThreads,
         startupTimeoutMs: config.localLlmStartupTimeoutMs,
       }, (error) => {
         process.stderr.write(

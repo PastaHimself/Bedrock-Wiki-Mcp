@@ -11,7 +11,9 @@ Group=bedrock-mcp
 WorkingDirectory=/var/lib/bedrock-mcp
 Environment=HOME=/var/lib/bedrock-mcp
 Environment=HF_HOME=/var/lib/bedrock-mcp/models/huggingface
-ExecStart=/usr/local/bin/llama-server -hf Qwen/Qwen3-1.7B-GGUF:Q8_0 --host 127.0.0.1 --port 8081 --ctx-size 4096 --parallel 1
+Environment=BEDROCK_MCP_LOCAL_LLM_THREADS=2
+EnvironmentFile=-/etc/bedrock-mcp/bedrock-mcp.env
+ExecStart=/usr/local/bin/llama-server -hf Qwen/Qwen3-1.7B-GGUF:Q8_0 --host 127.0.0.1 --port 8081 --ctx-size 4096 --threads ${BEDROCK_MCP_LOCAL_LLM_THREADS} --threads-batch ${BEDROCK_MCP_LOCAL_LLM_THREADS} --parallel 1
 ExecStartPost=/usr/bin/bash /opt/bedrock-wiki-mcp/deploy/scripts/wait-for-local-llm.sh http://127.0.0.1:8081/health 900
 Restart=on-failure
 RestartSec=5s

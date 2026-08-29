@@ -31,6 +31,7 @@ const environmentSchema = z.object({
   ).default("http://127.0.0.1:8081/v1"),
   BEDROCK_MCP_LOCAL_LLM_BINARY: z.string().trim().min(1).max(300).default("llama-server"),
   BEDROCK_MCP_LOCAL_LLM_MODEL: z.string().trim().min(1).max(300).default("Qwen/Qwen3-1.7B-GGUF:Q8_0"),
+  BEDROCK_MCP_LOCAL_LLM_THREADS: z.coerce.number().int().min(1).max(32).default(2),
   BEDROCK_MCP_LOCAL_LLM_STARTUP_TIMEOUT_MS: z.coerce.number().int().min(10_000).max(1_800_000).default(900_000),
   BEDROCK_MCP_LOCAL_LLM_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(60_000),
   BEDROCK_MCP_LOCAL_LLM_MAX_TOKENS: z.coerce.number().int().min(64).max(512).default(512),
@@ -59,6 +60,7 @@ export interface AppConfig {
   readonly localLlmBaseUrl: string;
   readonly localLlmBinary: string;
   readonly localLlmModel: string;
+  readonly localLlmThreads: number;
   readonly localLlmStartupTimeoutMs: number;
   readonly localLlmTimeoutMs: number;
   readonly localLlmMaxTokens: number;
@@ -103,6 +105,7 @@ export function loadConfig(
     localLlmBaseUrl: parsed.BEDROCK_MCP_LOCAL_LLM_BASE_URL,
     localLlmBinary: parsed.BEDROCK_MCP_LOCAL_LLM_BINARY,
     localLlmModel: parsed.BEDROCK_MCP_LOCAL_LLM_MODEL,
+    localLlmThreads: parsed.BEDROCK_MCP_LOCAL_LLM_THREADS,
     localLlmStartupTimeoutMs: parsed.BEDROCK_MCP_LOCAL_LLM_STARTUP_TIMEOUT_MS,
     localLlmTimeoutMs: parsed.BEDROCK_MCP_LOCAL_LLM_TIMEOUT_MS,
     localLlmMaxTokens: parsed.BEDROCK_MCP_LOCAL_LLM_MAX_TOKENS,
