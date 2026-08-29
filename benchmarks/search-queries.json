@@ -1,5 +1,5 @@
 {
-  "name": "Bedrock core retrieval quality",
+  "name": "Bedrock stable development retrieval quality",
   "targets": {
     "exactTop1": 0.95,
     "naturalTop3": 0.90,
@@ -10,37 +10,112 @@
       "id": "exact-health",
       "kind": "exact",
       "query": "minecraft:health",
+      "requiredTopK": 1,
       "relevant": [{ "identifier": "minecraft:health", "grade": 3 }]
     },
     {
       "id": "exact-nearest-attackable-target",
       "kind": "exact",
       "query": "minecraft:behavior.nearest_attackable_target",
+      "requiredTopK": 1,
       "relevant": [{ "identifier": "minecraft:behavior.nearest_attackable_target", "grade": 3 }]
     },
     {
       "id": "exact-player-spawn-runtime-chain",
       "kind": "exact",
       "query": "world.afterEvents.playerSpawn",
+      "requiredTopK": 1,
       "relevant": [{ "identifier": "WorldAfterEvents.playerSpawn", "grade": 3 }]
     },
     {
       "id": "exact-player-break-event",
       "kind": "exact",
       "query": "PlayerBreakBlockAfterEvent",
+      "requiredTopK": 1,
       "relevant": [{ "identifier": "PlayerBreakBlockAfterEvent", "grade": 3 }]
     },
     {
       "id": "exact-run-interval-runtime-chain",
       "kind": "exact",
       "query": "system.runInterval",
+      "requiredTopK": 1,
       "relevant": [{ "identifier": "System.runInterval", "grade": 3 }]
     },
     {
       "id": "exact-geometry",
       "kind": "exact",
       "query": "minecraft:geometry",
+      "requiredTopK": 1,
       "relevant": [{ "identifier": "minecraft:geometry", "grade": 3 }]
+    },
+    {
+      "id": "stable-server-version",
+      "kind": "natural",
+      "query": "current stable @minecraft/server version",
+      "requiredTopK": 2,
+      "relevant": [{ "source": "minecraft_npm_stable", "channel": "stable", "module": "@minecraft/server", "grade": 3 }]
+    },
+    {
+      "id": "stable-server-manifest-dependency",
+      "kind": "natural",
+      "query": "stable @minecraft/server manifest dependency version",
+      "requiredTopK": 3,
+      "relevant": [{ "source": "minecraft_npm_stable", "module": "@minecraft/server", "pathContains": "/server/", "grade": 3 }]
+    },
+    {
+      "id": "stable-server-ui-manifest-dependency",
+      "kind": "natural",
+      "query": "stable @minecraft/server-ui manifest dependency",
+      "requiredTopK": 3,
+      "relevant": [{ "source": "minecraft_npm_stable", "module": "@minecraft/server-ui", "grade": 3 }]
+    },
+    {
+      "id": "exact-molang-on-ground",
+      "kind": "exact",
+      "query": "query.is_on_ground",
+      "relevant": [{ "identifier": "query.is_on_ground", "grade": 3 }]
+    },
+    {
+      "id": "exact-entity-family",
+      "kind": "exact",
+      "query": "minecraft:type_family",
+      "relevant": [{ "identifier": "minecraft:type_family", "grade": 3 }]
+    },
+    {
+      "id": "exact-custom-block-component",
+      "kind": "exact",
+      "query": "BlockCustomComponent",
+      "relevant": [{ "identifier": "BlockCustomComponent", "grade": 3 }]
+    },
+    {
+      "id": "exact-item-use-event",
+      "kind": "exact",
+      "query": "ItemUseAfterEvent",
+      "relevant": [{ "identifier": "ItemUseAfterEvent", "grade": 3 }]
+    },
+    {
+      "id": "exact-world-dynamic-property",
+      "kind": "exact",
+      "query": "World.getDynamicProperty",
+      "relevant": [{ "identifier": "World.getDynamicProperty", "grade": 3 }]
+    },
+    {
+      "id": "exact-run-command",
+      "kind": "exact",
+      "query": "Dimension.runCommand",
+      "relevant": [{ "identifier": "Dimension.runCommand", "grade": 3 }]
+    },
+    {
+      "id": "exact-scoreboard",
+      "kind": "exact",
+      "query": "Scoreboard",
+      "relevant": [{ "identifier": "Scoreboard", "grade": 3 }]
+    },
+    {
+      "id": "exact-get-dimension",
+      "kind": "exact",
+      "query": "world.getDimension",
+      "relevant": [{ "identifier": "World.getDimension", "grade": 3 }]
     },
     {
       "id": "natural-mob-chase-player",
@@ -77,6 +152,24 @@
       "kind": "natural",
       "query": "run script after a player breaks a block",
       "relevant": [{ "identifier": "PlayerBreakBlockAfterEvent", "grade": 3 }]
+    },
+    {
+      "id": "natural-animation-controller",
+      "kind": "natural",
+      "query": "animation controller states transitions example",
+      "relevant": [{ "category": "animation_controllers", "grade": 3 }]
+    },
+    {
+      "id": "natural-manifest-dependencies",
+      "kind": "natural",
+      "query": "behavior pack manifest dependencies modules",
+      "relevant": [{ "category": "manifests", "grade": 3 }]
+    },
+    {
+      "id": "natural-resource-pack",
+      "kind": "natural",
+      "query": "resource pack textures geometry example",
+      "relevant": [{ "category": "resource_packs", "grade": 2 }, { "source": "bedrock_oss_examples", "grade": 3 }]
     }
   ]
 }
