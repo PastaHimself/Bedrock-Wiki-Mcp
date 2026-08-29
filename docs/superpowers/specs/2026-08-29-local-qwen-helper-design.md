@@ -65,8 +65,8 @@ The endpoint is configured for loopback by default (`127.0.0.1:8081`). The appli
 ## Resource budget
 
 - Default model: official Qwen3 1.7B `Q8_0` GGUF, about 1.83 GB on disk.
-- Default context sent by the helper: at most six results and 8,000 evidence characters, leaving room for instructions and the 512-token answer inside a 4K context.
-- Default generation: 512 tokens, 60-second timeout, one request at a time recommended by the deployment documentation.
+- Default context sent by the helper: at most six results and 2,000 evidence characters, leaving conservative room for instructions and the 512-token answer inside a 4K context.
+- Default generation: 512 tokens, 60-second timeout, and one request at a time; overlapping helper calls are rejected rather than queued.
 - Normal lookup prompts should include `/no_think` to avoid spending the small CPU/RAM budget on visible reasoning text.
 
 If the 3 GiB server cannot keep the model and Node process resident together, the deployment fallback is a smaller Qwen3 quantization or Qwen3 0.6B. The MCP integration remains unchanged because both expose the same local chat-completions interface.
@@ -84,7 +84,7 @@ The following environment variables are added:
 | `BEDROCK_MCP_LOCAL_LLM_MAX_TOKENS` | `512` | Maximum generated tokens. |
 | `BEDROCK_MCP_LOCAL_LLM_RETRIEVAL_LIMIT` | `6` | Maximum evidence resources supplied to Qwen. |
 
-The application does not start or download llama-server itself. Operators start the local model server separately, which keeps model-process lifecycle and model-cache ownership explicit. `LocalLlmClient` permits one active generation and one queued request; additional concurrent helper calls receive a retryable busy error.
+The application does not start or download llama-server itself. Operators start the local model server separately, which keeps model-process lifecycle and model-cache ownership explicit. `LocalLlmClient` permits one active generation; additional concurrent helper calls receive a retryable busy error.
 
 ## Verification
 

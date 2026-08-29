@@ -1,7 +1,7 @@
 import type { LocalLlmMessage } from "./local-llm.js";
 import type { KnowledgeSearchResult } from "../search/engine.js";
 
-export const MAX_GROUNDED_EVIDENCE_CHARS = 8_000;
+export const MAX_GROUNDED_EVIDENCE_CHARS = 2_000;
 const MAX_GENERATED_ANSWER_CHARS = 12_000;
 
 export interface GroundedCitation {

@@ -79,6 +79,7 @@ describe("production deployment artifacts", () => {
     expect(environment).toContain("BEDROCK_MCP_SEMANTIC_MODEL=onnx-community/all-MiniLM-L6-v2-ONNX");
     expect(environment).toContain("BEDROCK_MCP_LOCAL_LLM_ENABLED=false");
     expect(environment).toContain("BEDROCK_MCP_LOCAL_LLM_MODEL=Qwen/Qwen3-1.7B-GGUF:Q8_0");
+    expect(environment).toContain("BEDROCK_MCP_LOCAL_LLM_MAX_TOKENS=512");
     expect(environment).toContain("BEDROCK_MCP_BACKUP_RETAIN=3");
     expect(environment).toContain("BEDROCK_MCP_MIN_FREE_BYTES=2147483648");
   });

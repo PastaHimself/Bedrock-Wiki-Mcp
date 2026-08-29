@@ -46,6 +46,7 @@ describe("LocalLlmClient", () => {
     expect(requestUrl).toBe("http://127.0.0.1:8081/v1/chat/completions");
     expect(requestInit?.method).toBe("POST");
     expect(requestInit?.headers).toMatchObject({ "content-type": "application/json" });
+    expect(requestInit?.redirect).toBe("error");
     expect(JSON.parse(String(requestInit?.body))).toEqual({
       model: "Qwen/Qwen3-1.7B-GGUF:Q8_0",
       messages: [
@@ -108,7 +109,7 @@ describe("LocalLlmClient", () => {
       .rejects.toMatchObject({ code: "LOCAL_LLM_INVALID_RESPONSE" });
   });
 
-  it("allows one queued generation and rejects additional concurrent work", async () => {
+  it("rejects concurrent generations while one request is active", async () => {
     let calls = 0;
     let startFirst!: () => void;
     let releaseFirst!: () => void;
@@ -135,10 +136,10 @@ describe("LocalLlmClient", () => {
     const second = client.chat(request);
     const third = client.chat(request);
 
+    await expect(second).rejects.toMatchObject({ code: "LOCAL_LLM_BUSY" });
     await expect(third).rejects.toMatchObject({ code: "LOCAL_LLM_BUSY" });
     releaseFirst();
     await expect(first).resolves.toBe("Use [R1].");
-    await expect(second).resolves.toBe("Use [R1].");
-    expect(calls).toBe(2);
+    expect(calls).toBe(1);
   });
 });

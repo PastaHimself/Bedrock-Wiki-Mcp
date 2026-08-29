@@ -106,7 +106,6 @@ export class LocalLlmClient implements LocalLlm {
   private readonly maxTokens: number;
   private readonly fetchImpl: typeof fetch;
   private activeRequests = 0;
-  private readonly pendingRequests: Array<() => void> = [];
 
   constructor(options: LocalLlmClientOptions) {
     if (!isLoopbackLlmBaseUrl(options.baseUrl)) {
@@ -129,26 +128,16 @@ export class LocalLlmClient implements LocalLlm {
     this.fetchImpl = options.fetchImpl ?? fetch;
   }
 
-  private async acquireSlot(): Promise<() => void> {
-    if (this.activeRequests === 0) {
-      this.activeRequests = 1;
-      return () => this.releaseSlot();
-    }
-    if (this.pendingRequests.length >= 1) {
+  private acquireSlot(): () => void {
+    if (this.activeRequests !== 0) {
       throw new LocalLlmError("LOCAL_LLM_BUSY", "local model is already processing a request; retry shortly");
     }
-
-    await new Promise<void>((resolve) => this.pendingRequests.push(resolve));
+    this.activeRequests = 1;
     return () => this.releaseSlot();
   }
 
   private releaseSlot(): void {
-    const next = this.pendingRequests.shift();
-    if (next) {
-      next();
-    } else {
-      this.activeRequests = 0;
-    }
+    this.activeRequests = 0;
   }
 
   async chat(request: LocalLlmChatRequest): Promise<string> {
@@ -164,7 +153,7 @@ export class LocalLlmClient implements LocalLlm {
       throw new LocalLlmError("LOCAL_LLM_INVALID_REQUEST", "maxTokens must be between 1 and " + this.maxTokens);
     }
 
-    const release = await this.acquireSlot();
+    const release = this.acquireSlot();
     try {
       return await this.chatOnce(request, temperature, maxTokens);
     } finally {
@@ -184,6 +173,7 @@ export class LocalLlmClient implements LocalLlm {
       response = await this.fetchImpl(this.baseUrl + "/chat/completions", {
         method: "POST",
         headers: { "content-type": "application/json" },
+        redirect: "error",
         body: JSON.stringify({
           model: this.model,
           messages: request.messages,

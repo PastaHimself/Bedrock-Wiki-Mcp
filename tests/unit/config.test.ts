@@ -99,7 +99,7 @@ describe("loadConfig", () => {
     expect(() => loadConfig({ BEDROCK_MCP_SEMANTIC_TOP_K: "101" })).toThrow();
     expect(() => loadConfig({ BEDROCK_MCP_LOCAL_LLM_ENABLED: "yes" })).toThrow();
     expect(() => loadConfig({ BEDROCK_MCP_LOCAL_LLM_TIMEOUT_MS: "999" })).toThrow();
-    expect(() => loadConfig({ BEDROCK_MCP_LOCAL_LLM_MAX_TOKENS: "2049" })).toThrow();
+    expect(() => loadConfig({ BEDROCK_MCP_LOCAL_LLM_MAX_TOKENS: "513" })).toThrow();
     expect(() => loadConfig({ BEDROCK_MCP_LOCAL_LLM_RETRIEVAL_LIMIT: "9" })).toThrow();
     expect(() => loadConfig({ BEDROCK_MCP_LOCAL_LLM_BASE_URL: "https://example.com/v1" })).toThrow();
   });

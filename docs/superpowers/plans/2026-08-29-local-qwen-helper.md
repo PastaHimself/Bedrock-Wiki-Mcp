@@ -12,7 +12,7 @@ Files:
 Work:
 
 - Assert the six new local-LLM settings and their safe defaults/validation.
-- Use an injected fake `fetch` to assert the OpenAI-compatible request, successful response parsing, timeout conversion, incrementally bounded streamed responses, concurrency limits, and HTTP failures.
+- Use an injected fake `fetch` to assert the OpenAI-compatible request, redirect rejection, successful response parsing, timeout conversion, incrementally bounded streamed responses, concurrency limits, and HTTP failures.
 - Assert evidence formatting labels resources, treats evidence as untrusted, stays within the small-model context budget, requests citations, and removes Qwen `<think>` blocks from returned text.
 - Assert `ask_bedrock` is registered as read-only and accepts its query/filter shape.
 

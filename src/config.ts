@@ -31,7 +31,7 @@ const environmentSchema = z.object({
   ).default("http://127.0.0.1:8081/v1"),
   BEDROCK_MCP_LOCAL_LLM_MODEL: z.string().trim().min(1).max(300).default("Qwen/Qwen3-1.7B-GGUF:Q8_0"),
   BEDROCK_MCP_LOCAL_LLM_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(60_000),
-  BEDROCK_MCP_LOCAL_LLM_MAX_TOKENS: z.coerce.number().int().min(64).max(2_048).default(512),
+  BEDROCK_MCP_LOCAL_LLM_MAX_TOKENS: z.coerce.number().int().min(64).max(512).default(512),
   BEDROCK_MCP_LOCAL_LLM_RETRIEVAL_LIMIT: z.coerce.number().int().min(1).max(8).default(6),
 });
 

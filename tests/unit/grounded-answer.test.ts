@@ -47,8 +47,13 @@ describe("grounded Bedrock answers", () => {
   });
 
   it("keeps the evidence payload within the small-model context budget", () => {
-    const evidence = formatGroundedEvidence([result({ excerpt: "x".repeat(9_000) })], 8_000);
-    expect(evidence.text.length).toBeLessThanOrEqual(8_000);
+    const codeHeavyExcerpt = Array.from({ length: 200 }, (_, index) =>
+      `{"name":"field${index}","type":"EntityQueryOptions","description":"Use @minecraft/server in a behavior pack."}`,
+    ).join("\n");
+    const evidence = formatGroundedEvidence([result({ excerpt: codeHeavyExcerpt })], 2_000);
+    expect(evidence.text.length).toBeLessThanOrEqual(2_000);
+    expect(buildGroundedMessages("How do I use this API?", evidence)[1]?.content.length)
+      .toBeLessThan(3_500);
   });
 
   it("removes Qwen thinking markers from the user-facing answer", () => {
