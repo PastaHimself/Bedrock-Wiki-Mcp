@@ -65,9 +65,28 @@ const definitionSchema = z.object({
   channel: z.string(),
   sourceId: z.string(),
   sourceName: z.string(),
+  sourceType: z.string(),
   sourceTier: z.number().int(),
   isPrimary: z.boolean(),
   ...provenanceShape,
+});
+
+const definitionExampleSchema = z.object({
+  chunkId: z.string(),
+  documentId: z.string(),
+  title: z.string(),
+  content: z.string(),
+  path: z.string(),
+  channel: z.string(),
+  sourceId: z.string(),
+  sourceName: z.string(),
+  sourceTier: z.number().int(),
+  repository: z.string().optional(),
+  revision: z.string().optional(),
+  canonicalUrl: z.string().optional(),
+  apiPackage: z.string().optional(),
+  apiVersion: z.string().optional(),
+  minecraftVersion: z.string().optional(),
 });
 
 function textResult(value: unknown) {
@@ -162,16 +181,18 @@ export function registerKnowledgeTools(
     "fetch",
     {
       title: "Fetch Bedrock evidence",
-      description: "Fetch a document or chunk returned by search using only server-issued doc_* or chk_* IDs. Arbitrary filesystem paths are never accepted.",
+      description: "Fetch a document or chunk returned by search using only server-issued doc_* or chk_* IDs. Chunk fetches can return adjacent chunks or the surrounding heading section. Arbitrary filesystem paths are never accepted.",
       annotations: READ_ONLY,
       inputSchema: z.object({
         id: z.string().min(1).max(64),
+        contextMode: z.enum(["adjacent", "section"]).optional(),
         contextBefore: z.number().int().min(0).max(3).optional(),
         contextAfter: z.number().int().min(0).max(3).optional(),
         maxChars: z.number().int().min(1000).max(24000).optional(),
       }),
       outputSchema: z.object({
         targetKind: z.enum(["document", "chunk"]),
+        contextMode: z.enum(["adjacent", "section"]),
         documentId: z.string(),
         requestedChunkId: z.string().optional(),
         title: z.string(),
@@ -189,6 +210,7 @@ export function registerKnowledgeTools(
           chunkId: z.string(),
           ordinal: z.number().int(),
           title: z.string(),
+          headingPath: z.array(z.string()),
           identifier: z.string().optional(),
           chunkType: z.string(),
           content: z.string(),
@@ -207,6 +229,7 @@ export function registerKnowledgeTools(
       try {
         return textResult(fetchKnowledge(requireDatabase(database), {
           id: args.id,
+          ...(args.contextMode !== undefined ? { contextMode: args.contextMode } : {}),
           ...(args.contextBefore !== undefined ? { contextBefore: args.contextBefore } : {}),
           ...(args.contextAfter !== undefined ? { contextAfter: args.contextAfter } : {}),
           ...(args.maxChars !== undefined ? { maxChars: args.maxChars } : {}),
@@ -221,7 +244,7 @@ export function registerKnowledgeTools(
     "get_definition",
     {
       title: "Get Bedrock definition",
-      description: "Look up an exact Bedrock component or Script API identifier. Returns at most three definitions and prefers current stable, version-compatible material.",
+      description: "Look up an exact Bedrock component or Script API identifier. Returns at most three version-aware definitions plus up to two relevant code/example chunks when indexed.",
       annotations: READ_ONLY,
       inputSchema: z.object({
         identifier: z.string().trim().min(1).max(250),
@@ -233,6 +256,7 @@ export function registerKnowledgeTools(
       outputSchema: z.object({
         identifier: z.string(),
         definitions: z.array(definitionSchema).max(3),
+        examples: z.array(definitionExampleSchema).max(2),
         stableDefinitionFound: z.boolean(),
         warning: z.string().optional(),
       }),
@@ -256,7 +280,7 @@ export function registerKnowledgeTools(
     "list_sources",
     {
       title: "List knowledge sources",
-      description: "List indexed knowledge sources with trust tier, release channel, revision, and indexed document/chunk counts.",
+      description: "List indexed knowledge sources with trust tier, release channel, revision, last indexing time, empty-source health, and exact duplicate chunk percentage.",
       annotations: READ_ONLY,
       inputSchema: z.object({}),
       outputSchema: z.object({
@@ -267,8 +291,11 @@ export function registerKnowledgeTools(
           tier: z.number().int(),
           channel: z.string(),
           enabled: z.boolean(),
+          health: z.enum(["healthy", "empty"]),
           documents: z.number().int(),
           chunks: z.number().int(),
+          duplicateChunks: z.number().int(),
+          duplicatePercent: z.number(),
           repository: z.string().optional(),
           branch: z.string().optional(),
           revision: z.string().optional(),
@@ -289,7 +316,7 @@ export function registerKnowledgeTools(
     "list_categories",
     {
       title: "List knowledge categories",
-      description: "List categories currently present in the Bedrock knowledge index with document and chunk counts.",
+      description: "List controlled Bedrock development categories currently present in the index with document and chunk counts.",
       annotations: READ_ONLY,
       inputSchema: z.object({}),
       outputSchema: z.object({
