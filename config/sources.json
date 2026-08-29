@@ -131,6 +131,253 @@
       ]
     },
     {
+      "id": "bridge_core_docs",
+      "name": "bridge. Editor Documentation",
+      "type": "git",
+      "tier": 3,
+      "repository": "https://github.com/bridge-core/docs.git",
+      "branch": "main",
+      "channel": "stable",
+      "defaultEnabled": true,
+      "sparsePaths": [
+        "docs"
+      ],
+      "include": [
+        "README.md",
+        "docs/**/*.md",
+        "docs/**/*.mdx"
+      ]
+    },
+    {
+      "id": "bridge_core_editor_packages",
+      "name": "bridge. Editor Packages and Schemas",
+      "type": "git",
+      "tier": 3,
+      "repository": "https://github.com/bridge-core/editor-packages.git",
+      "branch": "main",
+      "channel": "stable",
+      "defaultEnabled": true,
+      "sparsePaths": [
+        "packages"
+      ],
+      "include": [
+        "README.md",
+        "packages/**/*.json",
+        "packages/**/*.md"
+      ]
+    },
+    {
+      "id": "blockception_language_server",
+      "name": "Blockception Minecraft Bedrock Language Server",
+      "type": "git",
+      "tier": 3,
+      "repository": "https://github.com/Blockception/minecraft-bedrock-language-server.git",
+      "branch": "main",
+      "channel": "stable",
+      "defaultEnabled": true,
+      "sparsePaths": [
+        "documentation",
+        "ide",
+        "packages",
+        "tools"
+      ],
+      "include": [
+        "README.md",
+        "documentation/**/*.md",
+        "documentation/**/*.json",
+        "ide/**/*.md",
+        "ide/**/*.js",
+        "ide/**/*.ts",
+        "packages/**/*.md",
+        "packages/**/*.js",
+        "packages/**/*.json",
+        "packages/**/*.ts",
+        "tools/**/*.md",
+        "tools/**/*.js",
+        "tools/**/*.json",
+        "tools/**/*.ts"
+      ],
+      "exclude": [
+        "**/test/**",
+        "**/tests/**",
+        "**/coverage/**",
+        "**/dist/**"
+      ]
+    },
+    {
+      "id": "blockception_json_schemas",
+      "name": "Blockception Minecraft Bedrock JSON Schemas",
+      "type": "git",
+      "tier": 3,
+      "repository": "https://github.com/Blockception/Minecraft-bedrock-json-schemas.git",
+      "branch": "main",
+      "channel": "stable",
+      "defaultEnabled": true,
+      "sparsePaths": [
+        "behavior",
+        "docs",
+        "general",
+        "language",
+        "resource",
+        "skinpacks",
+        "source",
+        "worldgen"
+      ],
+      "include": [
+        "README.md",
+        "behavior/**/*.json",
+        "docs/**/*.md",
+        "general/**/*.json",
+        "language/**/*.json",
+        "resource/**/*.json",
+        "skinpacks/**/*.json",
+        "source/**/*.json",
+        "worldgen/**/*.json"
+      ]
+    },
+    {
+      "id": "jayly_scriptapi",
+      "name": "Jayly Community Minecraft Script API Samples",
+      "type": "git",
+      "tier": 3,
+      "repository": "https://github.com/JaylyDev/ScriptAPI.git",
+      "branch": "stable",
+      "channel": "stable",
+      "defaultEnabled": true,
+      "sparsePaths": [
+        "packages",
+        "scripts",
+        "tools"
+      ],
+      "include": [
+        "README.md",
+        "packages/**/*.js",
+        "packages/**/*.json",
+        "packages/**/*.md",
+        "packages/**/*.ts",
+        "scripts/**/*.js",
+        "scripts/**/*.json",
+        "scripts/**/*.md",
+        "scripts/**/*.ts",
+        "tools/**/*.js",
+        "tools/**/*.json",
+        "tools/**/*.md",
+        "tools/**/*.ts"
+      ]
+    },
+    {
+      "id": "blockbench",
+      "name": "Blockbench Model Editor and Bedrock Formats",
+      "type": "git",
+      "tier": 3,
+      "repository": "https://github.com/JannisX11/blockbench.git",
+      "branch": "master",
+      "channel": "stable",
+      "defaultEnabled": true,
+      "sparsePaths": [
+        "content",
+        "js",
+        "types"
+      ],
+      "include": [
+        "README.md",
+        "content/**/*.md",
+        "js/**/*.js",
+        "js/**/*.json",
+        "types/**/*.d.ts",
+        "types/**/*.ts"
+      ],
+      "exclude": [
+        "js/libs/**",
+        "**/node_modules/**",
+        "**/build/**",
+        "**/assets/**"
+      ]
+    },
+    {
+      "id": "jannis_bedrock_schemas",
+      "name": "JannisX11 Bedrock JSON Schemas (Historical)",
+      "type": "git",
+      "tier": 3,
+      "repository": "https://github.com/JannisX11/bedrock-json-schemas.git",
+      "branch": "master",
+      "channel": "unknown",
+      "defaultEnabled": true,
+      "include": [
+        "README.md",
+        "*.json"
+      ],
+      "exclude": [
+        "package.json"
+      ]
+    },
+    {
+      "id": "nusiq_mcblend",
+      "name": "Mcblend Bedrock Modeling and Animation Guides",
+      "type": "git",
+      "tier": 3,
+      "repository": "https://github.com/Nusiq/mcblend.git",
+      "branch": "master",
+      "channel": "stable",
+      "defaultEnabled": true,
+      "sparsePaths": [
+        "docs"
+      ],
+      "include": [
+        "README.md",
+        "docs/**/*.md",
+        "docs/**/*.json"
+      ]
+    },
+    {
+      "id": "bedrock_core_server",
+      "name": "bedrock-core Addon Interoperability Framework",
+      "type": "git",
+      "tier": 3,
+      "repository": "https://github.com/bedrock-core/server.git",
+      "branch": "main",
+      "channel": "stable",
+      "defaultEnabled": true,
+      "sparsePaths": [
+        "packages",
+        "types"
+      ],
+      "include": [
+        "README.md",
+        "packages/**/*.js",
+        "packages/**/*.json",
+        "packages/**/*.md",
+        "packages/**/*.ts",
+        "types/**/*.json",
+        "types/**/*.ts"
+      ],
+      "exclude": [
+        "**/__tests__/**",
+        "**/test/**",
+        "**/tests/**",
+        "**/coverage/**"
+      ]
+    },
+    {
+      "id": "minecraft_addon_toolchain",
+      "name": "Minecraft Addon Toolchain (Historical)",
+      "type": "git",
+      "tier": 3,
+      "repository": "https://github.com/minecraft-addon-tools/minecraft-addon-toolchain.git",
+      "branch": "master",
+      "channel": "unknown",
+      "defaultEnabled": true,
+      "sparsePaths": [
+        "packages"
+      ],
+      "include": [
+        "README.md",
+        "packages/**/*.js",
+        "packages/**/*.json",
+        "packages/**/*.md"
+      ]
+    },
+    {
       "id": "bedrock_schemas_preview",
       "name": "Mojang Bedrock Schemas (Preview)",
       "type": "git",
