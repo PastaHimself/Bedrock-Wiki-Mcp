@@ -16,6 +16,7 @@ export interface ExactIdentifierHit {
   channel: string;
   sourceId: string;
   sourceName: string;
+  sourceType: string;
   sourceTier: number;
   isPrimary: boolean;
   repository?: string;
@@ -42,6 +43,7 @@ interface ExactIdentifierRow {
   channel: string;
   source_id: string;
   source_name: string;
+  source_type: string;
   source_tier: number;
   is_primary: number;
   repository: string | null;
@@ -85,6 +87,7 @@ export function exactIdentifierSearch(
       d.channel,
       s.id AS source_id,
       s.name AS source_name,
+      s.source_type AS source_type,
       s.tier AS source_tier,
       CASE WHEN c.identifier IS NOT NULL THEN 1 ELSE i.is_primary END AS is_primary,
       d.repository,
@@ -140,6 +143,7 @@ export function exactIdentifierSearch(
       channel: row.channel,
       sourceId: row.source_id,
       sourceName: row.source_name,
+      sourceType: row.source_type,
       sourceTier: row.source_tier,
       isPrimary: row.is_primary === 1,
       ...(row.repository ? { repository: row.repository } : {}),

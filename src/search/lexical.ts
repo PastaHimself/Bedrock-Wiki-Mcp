@@ -17,6 +17,7 @@ export interface LexicalSearchHit {
   channel: string;
   sourceId: string;
   sourceName: string;
+  sourceType: string;
   sourceTier: number;
   bm25Rank: number;
   repository?: string;
@@ -43,6 +44,7 @@ interface LexicalRow {
   channel: string;
   source_id: string;
   source_name: string;
+  source_type: string;
   source_tier: number;
   bm25_rank: number;
   repository: string | null;
@@ -92,6 +94,7 @@ export function lexicalSearch(database: DatabaseSync, query: string, limit = 50)
       d.channel,
       s.id AS source_id,
       s.name AS source_name,
+      s.source_type AS source_type,
       s.tier AS source_tier,
       bm25(chunks_fts, 12.0, 6.0, 4.0, 10.0, 1.0, 2.0) AS bm25_rank,
       d.repository,
@@ -125,6 +128,7 @@ export function lexicalSearch(database: DatabaseSync, query: string, limit = 50)
     channel: row.channel,
     sourceId: row.source_id,
     sourceName: row.source_name,
+    sourceType: row.source_type,
     sourceTier: row.source_tier,
     bm25Rank: row.bm25_rank,
     ...(row.repository ? { repository: row.repository } : {}),

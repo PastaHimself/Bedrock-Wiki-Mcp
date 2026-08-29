@@ -35,5 +35,21 @@ describe("MCP tool registry", () => {
         openWorldHint: false,
       });
     }
+
+    const searchConfig = tools.find((tool) => tool.name === "search")?.config as {
+      inputSchema: { parse(value: unknown): unknown };
+    };
+    expect(searchConfig.inputSchema.parse({
+      query: "@minecraft/server player input",
+      source: "minecraft_creator_docs",
+      channel: "preview",
+      module: "@minecraft/server",
+      pathPrefix: "creator/ScriptAPI/",
+    })).toMatchObject({
+      source: "minecraft_creator_docs",
+      channel: "preview",
+      module: "@minecraft/server",
+      pathPrefix: "creator/ScriptAPI/",
+    });
   });
 });

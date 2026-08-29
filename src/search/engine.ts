@@ -2,14 +2,14 @@ import type { DatabaseSync } from "node:sqlite";
 import { normalizeIdentifier } from "../identifiers/normalize.js";
 import type { DocumentKind } from "../models/enums.js";
 import { exactIdentifierSearch, type ExactIdentifierHit } from "./exact.js";
+import { detectBedrockQueryIntent, type BedrockQueryIntent } from "./intent.js";
 import { lexicalSearch, type LexicalSearchHit } from "./lexical.js";
 import { versionCompatibility, versionMatchScore } from "./version.js";
 
-const PREVIEW_INTENT = /\b(?:preview|beta|experimental)\b/i;
 const HISTORICAL_INTENT = /\b(?:historical|legacy|old\s+api|prior\s+api)\b/i;
 const STOP_WORDS = new Set([
-  "a", "an", "and", "are", "as", "at", "be", "by", "do", "does", "for", "from",
-  "how", "i", "in", "is", "it", "make", "of", "on", "the", "to", "use", "when", "with",
+  "a", "an", "and", "are", "as", "at", "be", "by", "current", "do", "does", "for", "from",
+  "how", "i", "in", "is", "it", "latest", "make", "of", "on", "the", "to", "use", "version", "when", "with",
 ]);
 const MAX_MERGED_RAW_CHARS = 3_200;
 const MIN_NEIGHBOR_SCORE = 12;
@@ -21,6 +21,10 @@ export interface KnowledgeSearchOptions {
   categories?: string[];
   stabilities?: string[];
   sourceTiers?: number[];
+  sourceId?: string;
+  channel?: string;
+  apiPackage?: string;
+  pathPrefix?: string;
   minecraftVersion?: string;
   apiVersion?: string;
   includePreview?: boolean;
@@ -42,6 +46,7 @@ export interface KnowledgeSearchResult {
   channel: string;
   sourceId: string;
   sourceName: string;
+  sourceType: string;
   sourceTier: number;
   score: number;
   exactMatch: boolean;
@@ -62,6 +67,20 @@ export interface KnowledgeSearchResponse {
   totalChars: number;
 }
 
+export interface KnowledgeFilterCandidate {
+  kind: string;
+  category: string;
+  stability: string;
+  lifecycle: string;
+  channel: string;
+  sourceId: string;
+  sourceTier: number;
+  path: string;
+  apiPackage?: string;
+  apiVersion?: string;
+  minecraftVersion?: string;
+}
+
 type Candidate = KnowledgeSearchResult & {
   rawContent: string;
   ordinal: number;
@@ -76,7 +95,12 @@ function validateOptions(options: KnowledgeSearchOptions): { limit: number; maxC
   if (options.query.trim().length < 1 || options.query.length > 500) throw new RangeError("query must contain 1 to 500 characters");
   if ((options.kinds?.length ?? 0) > 10) throw new RangeError("kinds may contain at most 10 values");
   if ((options.categories?.length ?? 0) > 10) throw new RangeError("categories may contain at most 10 values");
+  if ((options.stabilities?.length ?? 0) > 5) throw new RangeError("stabilities may contain at most 5 values");
   if ((options.sourceTiers?.length ?? 0) > 4) throw new RangeError("sourceTiers may contain at most 4 values");
+  if ((options.sourceId?.length ?? 0) > 100) throw new RangeError("sourceId may contain at most 100 characters");
+  if ((options.channel?.length ?? 0) > 20) throw new RangeError("channel may contain at most 20 characters");
+  if ((options.apiPackage?.length ?? 0) > 100) throw new RangeError("apiPackage may contain at most 100 characters");
+  if ((options.pathPrefix?.length ?? 0) > 500) throw new RangeError("pathPrefix may contain at most 500 characters");
   if ((options.minecraftVersion?.length ?? 0) > 50) throw new RangeError("minecraftVersion may contain at most 50 characters");
   if ((options.apiVersion?.length ?? 0) > 50) throw new RangeError("apiVersion may contain at most 50 characters");
   for (const tier of options.sourceTiers ?? []) {
@@ -85,17 +109,88 @@ function validateOptions(options: KnowledgeSearchOptions): { limit: number; maxC
   return { limit, maxChars };
 }
 
+export function includePreviewForSearch(options: KnowledgeSearchOptions): boolean {
+  const intent = detectBedrockQueryIntent(options.query);
+  return options.includePreview ?? (intent.preview || options.channel?.toLocaleLowerCase("en-US") === "preview");
+}
+
+export function knowledgeCandidateAllowed(candidate: KnowledgeFilterCandidate, options: KnowledgeSearchOptions): boolean {
+  const includePreview = includePreviewForSearch(options);
+  const includeHistorical = options.includeHistorical ?? HISTORICAL_INTENT.test(options.query);
+  if (!includePreview && (candidate.channel === "preview" || ["beta", "experimental", "internal"].includes(candidate.stability))) return false;
+  if (!includeHistorical && ["historical", "removed"].includes(candidate.lifecycle)) return false;
+  if (options.kinds?.length && !options.kinds.includes(candidate.kind as DocumentKind)) return false;
+  if (options.categories?.length && !options.categories.includes(candidate.category)) return false;
+  if (options.stabilities?.length && !options.stabilities.includes(candidate.stability)) return false;
+  const tiers = options.sourceTiers ?? [1, 2, 3];
+  if (!tiers.includes(candidate.sourceTier)) return false;
+  if (options.sourceId && candidate.sourceId !== options.sourceId) return false;
+  if (options.channel && candidate.channel.toLocaleLowerCase("en-US") !== options.channel.toLocaleLowerCase("en-US")) return false;
+  if (options.apiPackage && candidate.apiPackage?.toLocaleLowerCase("en-US") !== options.apiPackage.toLocaleLowerCase("en-US")) return false;
+  if (options.pathPrefix && !candidate.path.toLocaleLowerCase("en-US").startsWith(options.pathPrefix.replace(/^\/+/, "").toLocaleLowerCase("en-US"))) return false;
+  if (versionCompatibility(options.minecraftVersion, candidate.minecraftVersion) === "mismatch") return false;
+  if (versionCompatibility(options.apiVersion, candidate.apiVersion) === "mismatch") return false;
+  return true;
+}
+
 function metadataBonus(candidate: Pick<Candidate, "sourceTier" | "stability" | "lifecycle" | "channel">): number {
-  let score = (5 - candidate.sourceTier) * 0.75;
-  score += candidate.lifecycle === "active" ? 3 : candidate.lifecycle === "deprecated" ? -2 : candidate.lifecycle === "historical" ? -5 : 0;
-  score += candidate.stability === "stable" ? 3 : candidate.stability === "beta" ? 1 : candidate.stability === "experimental" ? -2 : candidate.stability === "internal" ? -4 : 0;
-  score += candidate.channel === "stable" ? 2 : candidate.channel === "preview" ? -2 : 0;
+  let score = (5 - candidate.sourceTier) * 2.5;
+  score += candidate.lifecycle === "active" ? 4 : candidate.lifecycle === "deprecated" ? -4 : candidate.lifecycle === "historical" ? -8 : 0;
+  score += candidate.stability === "stable" ? 4 : candidate.stability === "beta" ? 1 : candidate.stability === "experimental" ? -2 : candidate.stability === "internal" ? -5 : 0;
+  score += candidate.channel === "stable" ? 3 : candidate.channel === "preview" ? -2 : 0;
   return score;
 }
 
 function requestedVersionBonus(candidate: Candidate, options: KnowledgeSearchOptions): number {
   return versionMatchScore(options.minecraftVersion, candidate.minecraftVersion)
     + versionMatchScore(options.apiVersion, candidate.apiVersion);
+}
+
+function meaningfulQueryTerms(query: string): string[] {
+  const raw = query.toLocaleLowerCase("en-US").match(/[\p{L}\p{N}_@.$:-]+/gu) ?? [];
+  return [...new Set(raw.filter((term) => term.length > 1 && !STOP_WORDS.has(term)))].slice(0, 8);
+}
+
+function intentBonus(candidate: Candidate, intent: BedrockQueryIntent, terms: readonly string[]): number {
+  let score = 0;
+  const packageName = candidate.apiPackage?.toLocaleLowerCase("en-US");
+  const lowerTitle = candidate.title.toLocaleLowerCase("en-US");
+  const lowerPath = candidate.path.toLocaleLowerCase("en-US");
+
+  if (intent.module && packageName === intent.module) score += 40;
+  if (intent.version) {
+    if (candidate.sourceType === "npm") score += 28;
+    if (candidate.apiVersion) score += 8;
+  }
+  if (intent.manifest) {
+    if (candidate.category === "manifests") score += 18;
+    if (lowerPath.includes("manifest") || lowerTitle.includes("manifest")) score += 12;
+    if (candidate.sourceType === "npm" && candidate.channel === "stable") score += 8;
+  }
+  if (intent.example) {
+    if (candidate.kind === "example") score += 18;
+    else if (candidate.kind === "code") score += 10;
+    if (/(?:^|\/)(?:samples?|examples?)(?:\/|$)/i.test(candidate.path)) score += 12;
+  }
+  if (intent.definition && ["api", "component", "reference"].includes(candidate.kind)) score += 10;
+  if (intent.debugging) {
+    if (["schemas", "debugging"].includes(candidate.category)) score += 16;
+    if (/schema|debug/i.test(candidate.path)) score += 8;
+  }
+  if (intent.preview) {
+    if (candidate.channel === "preview") score += 18;
+    if (["beta", "experimental"].includes(candidate.stability)) score += 8;
+  } else if (intent.stable) {
+    if (candidate.channel === "stable") score += 18;
+    if (candidate.stability === "stable") score += 8;
+    if (candidate.channel === "preview") score -= 16;
+  }
+
+  for (const term of terms) {
+    if (lowerTitle.includes(term)) score += 2.5;
+    if (lowerPath.includes(term)) score += 0.75;
+  }
+  return score;
 }
 
 function fromExact(hit: ExactIdentifierHit, rank: number): Candidate {
@@ -116,6 +211,7 @@ function fromExact(hit: ExactIdentifierHit, rank: number): Candidate {
     channel: hit.channel,
     sourceId: hit.sourceId,
     sourceName: hit.sourceName,
+    sourceType: hit.sourceType,
     sourceTier: hit.sourceTier,
     score: 1000 - rank * 5 + (hit.isPrimary ? 2 : 0),
     exactMatch: true,
@@ -149,6 +245,7 @@ function fromLexical(hit: LexicalSearchHit, rank: number): Candidate {
     channel: hit.channel,
     sourceId: hit.sourceId,
     sourceName: hit.sourceName,
+    sourceType: hit.sourceType,
     sourceTier: hit.sourceTier,
     score: 100 / (rank + 1),
     exactMatch: false,
@@ -164,28 +261,10 @@ function fromLexical(hit: LexicalSearchHit, rank: number): Candidate {
   return candidate;
 }
 
-function candidateAllowed(candidate: Candidate, options: KnowledgeSearchOptions, includePreview: boolean, includeHistorical: boolean): boolean {
-  if (!includePreview && (candidate.channel === "preview" || ["beta", "experimental", "internal"].includes(candidate.stability))) return false;
-  if (!includeHistorical && ["historical", "removed"].includes(candidate.lifecycle)) return false;
-  if (options.kinds?.length && !options.kinds.includes(candidate.kind as DocumentKind)) return false;
-  if (options.categories?.length && !options.categories.includes(candidate.category)) return false;
-  if (options.stabilities?.length && !options.stabilities.includes(candidate.stability)) return false;
-  const tiers = options.sourceTiers ?? [1, 2, 3];
-  if (!tiers.includes(candidate.sourceTier)) return false;
-  if (versionCompatibility(options.minecraftVersion, candidate.minecraftVersion) === "mismatch") return false;
-  if (versionCompatibility(options.apiVersion, candidate.apiVersion) === "mismatch") return false;
-  return true;
-}
-
-function meaningfulQueryTerms(query: string): string[] {
-  const raw = query.toLocaleLowerCase().match(/[\p{L}\p{N}_@.$:-]+/gu) ?? [];
-  return [...new Set(raw.filter((term) => term.length > 1 && !STOP_WORDS.has(term)))].slice(0, 6);
-}
-
-function fallbackLexicalSearch(database: DatabaseSync, query: string): LexicalSearchHit[] {
+function fallbackLexicalSearch(database: DatabaseSync, query: string, wide = false): LexicalSearchHit[] {
   const accumulated = new Map<string, { hit: LexicalSearchHit; score: number }>();
   for (const term of meaningfulQueryTerms(query)) {
-    for (const [rank, hit] of lexicalSearch(database, term, 15).entries()) {
+    for (const [rank, hit] of lexicalSearch(database, term, wide ? 30 : 15).entries()) {
       const existing = accumulated.get(hit.chunkId);
       if (existing) {
         existing.score += 1 / (rank + 1);
@@ -197,16 +276,16 @@ function fallbackLexicalSearch(database: DatabaseSync, query: string): LexicalSe
   return [...accumulated.values()]
     .sort((a, b) => b.score - a.score || a.hit.bm25Rank - b.hit.bm25Rank)
     .map((entry) => entry.hit)
-    .slice(0, 50);
+    .slice(0, wide ? 100 : 50);
 }
 
 function excerptFor(content: string, query: string, maxLength = 1_600): string {
   if (content.length <= maxLength) return content;
-  const queryTerms = query.toLocaleLowerCase().match(/[\p{L}\p{N}_@.$:-]+/gu) ?? [];
-  const lower = content.toLocaleLowerCase();
+  const queryTerms = query.toLocaleLowerCase("en-US").match(/[\p{L}\p{N}_@.$:-]+/gu) ?? [];
+  const lower = content.toLocaleLowerCase("en-US");
   let index = -1;
   for (const term of queryTerms) {
-    const found = lower.indexOf(term.toLocaleLowerCase());
+    const found = lower.indexOf(term.toLocaleLowerCase("en-US"));
     if (found >= 0 && (index < 0 || found < index)) index = found;
   }
   if (index < 0) return `${content.slice(0, maxLength - 1).trimEnd()}…`;
@@ -291,6 +370,7 @@ function publicResult(candidate: Candidate, excerpt: string): KnowledgeSearchRes
     channel: candidate.channel,
     sourceId: candidate.sourceId,
     sourceName: candidate.sourceName,
+    sourceType: candidate.sourceType,
     sourceTier: candidate.sourceTier,
     score: Number(candidate.score.toFixed(3)),
     exactMatch: candidate.exactMatch,
@@ -308,23 +388,26 @@ function publicResult(candidate: Candidate, excerpt: string): KnowledgeSearchRes
 export function searchKnowledge(database: DatabaseSync, options: KnowledgeSearchOptions): KnowledgeSearchResponse {
   const validated = validateOptions(options);
   const query = options.query.trim();
-  const includePreview = options.includePreview ?? PREVIEW_INTENT.test(query);
-  const includeHistorical = options.includeHistorical ?? HISTORICAL_INTENT.test(query);
+  const intent = detectBedrockQueryIntent(query);
   const candidates = new Map<string, Candidate>();
+  const narrowFilter = Boolean(options.sourceId || options.channel || options.apiPackage || options.pathPrefix);
 
-  for (const [rank, hit] of exactIdentifierSearch(database, query, 30).entries()) {
+  for (const [rank, hit] of exactIdentifierSearch(database, query, narrowFilter ? 50 : 30).entries()) {
     const candidate = fromExact(hit, rank);
     candidates.set(candidate.chunkId, candidate);
   }
 
   let lexicalHits: LexicalSearchHit[] = [];
   try {
-    lexicalHits = lexicalSearch(database, query, 50);
+    lexicalHits = lexicalSearch(database, query, narrowFilter ? 100 : 50);
     if (lexicalHits.length === 0 && meaningfulQueryTerms(query).length > 1) {
-      lexicalHits = fallbackLexicalSearch(database, query);
+      lexicalHits = fallbackLexicalSearch(database, query, narrowFilter);
     }
   } catch (error) {
-    if (candidates.size === 0) throw error;
+    if (candidates.size === 0 && meaningfulQueryTerms(query).length > 0) {
+      lexicalHits = fallbackLexicalSearch(database, query, narrowFilter);
+      if (lexicalHits.length === 0) throw error;
+    }
   }
 
   for (const [rank, hit] of lexicalHits.entries()) {
@@ -337,11 +420,13 @@ export function searchKnowledge(database: DatabaseSync, options: KnowledgeSearch
   }
 
   const normalizedQuery = normalizeIdentifier(query);
+  const terms = meaningfulQueryTerms(query);
   const filtered = [...candidates.values()]
-    .filter((candidate) => candidateAllowed(candidate, options, includePreview, includeHistorical))
+    .filter((candidate) => knowledgeCandidateAllowed(candidate, options))
     .map((candidate) => {
       if (candidate.identifier && normalizeIdentifier(candidate.identifier) === normalizedQuery) candidate.score += 20;
       candidate.score += requestedVersionBonus(candidate, options);
+      candidate.score += intentBonus(candidate, intent, terms);
       return candidate;
     })
     .sort((a, b) => b.score - a.score || a.sourceTier - b.sourceTier || a.chunkId.localeCompare(b.chunkId));

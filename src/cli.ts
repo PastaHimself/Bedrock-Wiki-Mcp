@@ -17,6 +17,7 @@ import { close, createHttpServer, listen } from "./server.js";
 import { rebuildSemanticIndex } from "./semantic/builder.js";
 import { coreSemanticFingerprint } from "./semantic/database.js";
 import { TransformersEmbedder } from "./semantic/embedder.js";
+import { initializeOptionalSemantic } from "./semantic/optional.js";
 import { openSemanticRetriever, type SqliteSemanticRetriever } from "./semantic/retriever.js";
 import { syncNpmSources } from "./sources/npm.js";
 import { syncConfiguredSources } from "./sources/sync.js";
@@ -266,25 +267,23 @@ function openServingDatabase(path: string): DatabaseSync {
 async function serve(): Promise<number> {
   const config = loadRuntimeConfig();
   const database = openServingDatabase(indexPath(config.dataDir));
-  let semantic: SqliteSemanticRetriever | undefined;
-  try {
-    if (config.semanticEnabled) {
+  const semantic = await initializeOptionalSemantic<SqliteSemanticRetriever>(
+    config.semanticEnabled,
+    async () => {
       const embedder = new TransformersEmbedder(config.semanticModel, {
         cacheDir: semanticModelCachePath(config.dataDir),
         allowRemoteModels: false,
       });
       await embedder.embed(["minecraft bedrock semantic startup"]);
-      semantic = openSemanticRetriever(
+      return openSemanticRetriever(
         semanticIndexPath(config.dataDir),
         embedder,
         coreSemanticFingerprint(database),
         config.semanticTopK,
       );
-    }
-  } catch (error) {
-    database.close();
-    throw error;
-  }
+    },
+    (message) => process.stderr.write(`${message}\n`),
+  );
 
   const server = createHttpServer({ database, config, ...(semantic ? { semantic } : {}) });
   try {
