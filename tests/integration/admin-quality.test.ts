@@ -135,7 +135,7 @@ describe("administrative quality operations", () => {
     expect(path).toContain(join("data", "index", "bedrock.db"));
   });
 
-  it("computes retrieval metrics and enforces benchmark targets", async () => {
+  it("computes retrieval metrics and enforces provenance-aware required rank gates", async () => {
     const root = await temporaryDirectory();
     const path = await buildIndex(root);
     const database = openDatabase(path, { mode: "readonly" });
@@ -147,19 +147,23 @@ describe("administrative quality operations", () => {
           id: "health-exact",
           kind: "exact",
           query: "minecraft:health",
-          relevant: [{ identifier: "minecraft:health", grade: 3 }],
+          requiredTopK: 1,
+          relevant: [{ identifier: "minecraft:health", source: "official", category: "entities", grade: 3 }],
         },
         {
           id: "target-natural-metric",
           kind: "natural",
           query: "minecraft:behavior.nearest_attackable_target",
-          relevant: [{ identifier: "minecraft:behavior.nearest_attackable_target", grade: 3 }],
+          relevant: [{ identifier: "minecraft:behavior.nearest_attackable_target", source: "official", grade: 3 }],
         },
       ],
     };
     try {
       const summary = runBenchmark(database, suite);
       expect(summary.passedTargets).toBe(true);
+      expect(summary.requiredGatePassed).toBe(true);
+      expect(summary.requiredCases).toBe(1);
+      expect(summary.requiredCasesPassed).toBe(1);
       expect(summary.mrr).toBe(1);
       expect(summary.recallAt3).toBe(1);
       expect(summary.recallAt5).toBe(1);
@@ -167,6 +171,7 @@ describe("administrative quality operations", () => {
       expect(summary.exactTop1).toBe(1);
       expect(summary.naturalTop3).toBe(1);
       expect(summary.usefulTop5).toBe(1);
+      expect(summary.cases[0]?.topResults[0]).toContain("official/stable/entities");
     } finally {
       database.close();
     }
