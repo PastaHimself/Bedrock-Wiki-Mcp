@@ -29,6 +29,7 @@ The server currently provides:
 - intent-aware ranking for definitions, examples, manifests, package versions, debugging, stable, and preview questions
 - conservative cross-source duplicate suppression that preserves distinct versions/channels
 - optional local Transformers.js + sqlite-vec semantic retrieval with lexical fallback
+- optional local Qwen3 answer helper grounded in indexed evidence, with resource citations
 - controlled `doc_*` / `chk_*` fetching; no arbitrary filesystem reads
 - section-aware fetch context and code/example evidence from `get_definition`
 - verified Microsoft/Mojang Git source ingestion plus lower-ranked community knowledge
@@ -47,6 +48,7 @@ The public surface intentionally stays small and read-only:
 - `get_definition` — exact identifier lookup with stable-first, version-aware handling plus relevant indexed code/examples
 - `list_sources` — indexed source provenance, trust tiers, release channel, counts, health, duplicate percentage, revision, and last indexing time
 - `list_categories` — controlled Bedrock development categories currently present in the index
+- `ask_bedrock` — optional local Qwen answer generation over search evidence with `[R#]` citations; disabled unless explicitly enabled
 
 The public MCP server does **not** expose arbitrary file reads, shell commands, database writes, source synchronization, backup, benchmark, status administration, or index-update operations.
 
@@ -106,7 +108,37 @@ BEDROCK_MCP_SEMANTIC_ENABLED=true
 
 `semantic.db` stores a fingerprint of the exact lexical/core index it was built from. The server refuses stale, wrong-model, wrong-dimension, or wrong-schema semantic databases instead of silently combining inconsistent indexes. If optional semantic initialization fails, serving degrades to the lexical SQLite/FTS5 path instead of taking the MCP offline.
 
-For constrained servers, keep the model cache and `semantic.db` on persistent storage and use the default MiniLM-class model rather than a substantially larger embedding model. Semantic retrieval remains optional; the five public tools and exact/lexical behavior are fully available without it.
+For constrained servers, keep the model cache and `semantic.db` on persistent storage and use the default MiniLM-class model rather than a substantially larger embedding model. Semantic retrieval remains optional; the six public tools and exact/lexical behavior are fully available without it.
+
+### Optional local Qwen helper
+
+The answer helper is local-only. It searches the existing SQLite index, gives bounded excerpts to Qwen, and returns the answer together with the exact indexed resources used. It does not call a hosted AI API and does not replace the deterministic retrieval tools.
+
+Install a current `llama.cpp` build that provides `llama-server`, then start the official Qwen3 1.7B GGUF on loopback:
+
+~~~bash
+llama-server \
+  -hf Qwen/Qwen3-1.7B-GGUF:Q8_0 \
+  --host 127.0.0.1 \
+  --port 8081 \
+  --ctx-size 4096 \
+  --parallel 1
+~~~
+
+The official Q8 model is about 1.83 GB on disk. On a 3 GiB host, keep the context and concurrency conservative; CPU speed affects response time, while model weights and context consume RAM. If the combined Node/Qwen process exceeds available memory, use a smaller Qwen3 quantization or Qwen3 0.6B without changing the MCP integration.
+
+Enable the helper in `.env`:
+
+~~~text
+BEDROCK_MCP_LOCAL_LLM_ENABLED=true
+BEDROCK_MCP_LOCAL_LLM_BASE_URL=http://127.0.0.1:8081/v1
+BEDROCK_MCP_LOCAL_LLM_MODEL=Qwen/Qwen3-1.7B-GGUF:Q8_0
+BEDROCK_MCP_LOCAL_LLM_TIMEOUT_MS=60000
+BEDROCK_MCP_LOCAL_LLM_MAX_TOKENS=512
+BEDROCK_MCP_LOCAL_LLM_RETRIEVAL_LIMIT=6
+~~~
+
+Start `llama-server` before the MCP process. The helper uses `/no_think` for normal lookup questions, limits evidence to six resources/2,000 characters so it fits the 4K model context with generation space, rejects overlapping local generations, and reports a clear error if the local endpoint is disabled or unavailable. Keep port 8081 private; only expose the MCP endpoint through your normal reverse proxy.
 
 ## Knowledge sources
 

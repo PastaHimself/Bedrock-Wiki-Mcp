@@ -20,6 +20,12 @@ const config: AppConfig = {
   semanticEnabled: false,
   semanticModel: "onnx-community/all-MiniLM-L6-v2-ONNX",
   semanticTopK: 40,
+  localLlmEnabled: false,
+  localLlmBaseUrl: "http://127.0.0.1:8081/v1",
+  localLlmModel: "Qwen/Qwen3-1.7B-GGUF:Q8_0",
+  localLlmTimeoutMs: 60000,
+  localLlmMaxTokens: 512,
+  localLlmRetrievalLimit: 6,
 };
 
 afterEach(async () => {

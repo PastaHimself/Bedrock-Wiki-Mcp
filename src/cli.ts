@@ -4,6 +4,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { createBackup } from "./admin/backup.js";
 import { formatBenchmarkSummary, loadBenchmarkSuite, runBenchmark } from "./admin/benchmark.js";
 import { formatIndexStatus, readIndexStatus } from "./admin/status.js";
+import { LocalLlmClient } from "./ai/local-llm.js";
 import { loadRuntimeConfig } from "./config.js";
 import { MCP_PATH, SERVICE_NAME, SERVICE_VERSION } from "./constants.js";
 import { openDatabase } from "./db/connection.js";
@@ -54,6 +55,12 @@ Environment:
   BEDROCK_MCP_SEMANTIC_ENABLED         true | false (default: false)
   BEDROCK_MCP_SEMANTIC_MODEL           Local Transformers.js embedding model id
   BEDROCK_MCP_SEMANTIC_TOP_K           Semantic candidate count (default: 40)
+  BEDROCK_MCP_LOCAL_LLM_ENABLED        true | false; enables ask_bedrock (default: false)
+  BEDROCK_MCP_LOCAL_LLM_BASE_URL       Loopback llama-server API (default: http://127.0.0.1:8081/v1)
+  BEDROCK_MCP_LOCAL_LLM_MODEL          Model id (default: Qwen/Qwen3-1.7B-GGUF:Q8_0)
+  BEDROCK_MCP_LOCAL_LLM_TIMEOUT_MS     Inference timeout in milliseconds (default: 60000)
+  BEDROCK_MCP_LOCAL_LLM_MAX_TOKENS     Generation limit (default: 512)
+  BEDROCK_MCP_LOCAL_LLM_RETRIEVAL_LIMIT Maximum evidence resources (default: 6)
 `;
 
 function indexPath(dataDir: string): string {
@@ -285,7 +292,20 @@ async function serve(): Promise<number> {
     (message) => process.stderr.write(`${message}\n`),
   );
 
-  const server = createHttpServer({ database, config, ...(semantic ? { semantic } : {}) });
+  const localLlm = config.localLlmEnabled
+    ? new LocalLlmClient({
+      baseUrl: config.localLlmBaseUrl,
+      model: config.localLlmModel,
+      timeoutMs: config.localLlmTimeoutMs,
+      maxTokens: config.localLlmMaxTokens,
+    })
+    : undefined;
+  const server = createHttpServer({
+    database,
+    config,
+    ...(semantic ? { semantic } : {}),
+    ...(localLlm ? { localLlm } : {}),
+  });
   try {
     await listen(server, config);
   } catch (error) {

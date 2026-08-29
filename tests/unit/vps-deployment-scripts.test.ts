@@ -35,6 +35,7 @@ describe("small VPS deployment workflow", () => {
     expectBashSyntax("deploy/scripts/bootstrap-ubuntu.sh");
     expectBashSyntax("deploy/scripts/set-application-permissions.sh");
     expectBashSyntax("deploy/scripts/verify-production.sh");
+    expectBashSyntax("deploy/scripts/wait-for-local-llm.sh");
   });
 
   it("provides the privilege harness required by CI for the real permission regression", () => {

@@ -1,6 +1,6 @@
 # Production deployment
 
-This directory contains deployment templates for the production milestone. The public MCP server remains read-only; source synchronization and index replacement are explicit administrative operations. Optional semantic retrieval is also built administratively and remains disabled by default.
+This directory contains deployment templates for the production milestone. The public MCP server remains read-only; source synchronization and index replacement are explicit administrative operations. Optional semantic retrieval and the local Qwen answer helper are disabled by default.
 
 ## Recommended Ubuntu layout
 
@@ -72,6 +72,44 @@ BEDROCK_MCP_SEMANTIC_TOP_K=40
 Leave it disabled on the smallest hosts. When enabled, the updater builds `/var/lib/bedrock-mcp/index/semantic.db` and caches the model under `/var/lib/bedrock-mcp/models/`. The public service loads the model from that persistent cache with remote model loading disabled.
 
 The Node service should normally bind only to `127.0.0.1:8080`. Do not expose SQLite, source-update commands, or an administrative port.
+
+### Optional local Qwen answer helper
+
+The helper runs Qwen locally through a separately supervised llama-server process. It is not a cloud API integration and it is not started by the Node process. Install a current llama.cpp build with llama-server, then start the official model on a private loopback port:
+
+~~~bash
+llama-server -hf Qwen/Qwen3-1.7B-GGUF:Q8_0 --host 127.0.0.1 --port 8081 --ctx-size 4096 --parallel 1
+~~~
+
+Before starting the bedrock-mcp.service unit, set these values in /etc/bedrock-mcp/bedrock-mcp.env:
+
+~~~text
+BEDROCK_MCP_LOCAL_LLM_ENABLED=true
+BEDROCK_MCP_LOCAL_LLM_BASE_URL=http://127.0.0.1:8081/v1
+BEDROCK_MCP_LOCAL_LLM_MODEL=Qwen/Qwen3-1.7B-GGUF:Q8_0
+BEDROCK_MCP_LOCAL_LLM_TIMEOUT_MS=60000
+BEDROCK_MCP_LOCAL_LLM_MAX_TOKENS=512
+BEDROCK_MCP_LOCAL_LLM_RETRIEVAL_LIMIT=6
+~~~
+
+The repository includes an optional systemd unit that keeps the model supervised, stores the Hugging Face cache under `/var/lib/bedrock-mcp/huggingface`, waits for `/health`, and binds only to loopback. It assumes the llama-server binary is `/usr/local/bin/llama-server`; edit `deploy/systemd/bedrock-qwen.service` if your build is elsewhere:
+
+~~~bash
+sudo install -d -o bedrock-mcp -g bedrock-mcp -m 0750 /var/lib/bedrock-mcp/huggingface
+sudo install -m 0644 deploy/systemd/bedrock-qwen.service /etc/systemd/system/bedrock-qwen.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now bedrock-qwen.service
+~~~
+
+To make the Node service wait for Qwen readiness, add this optional drop-in with `sudo systemctl edit bedrock-mcp.service`:
+
+~~~ini
+[Unit]
+Requires=bedrock-qwen.service
+After=bedrock-qwen.service
+~~~
+
+The Q8 model is about 1.83 GB on disk; on a 3 GiB VPS, use `--ctx-size 4096` and `--parallel 1`, measure peak RSS, and switch to a smaller Qwen3 quantization or Qwen3 0.6B if the two processes do not fit together. The MCP server remains usable with the helper disabled. Check the model service with `systemctl status bedrock-qwen.service` and `journalctl -u bedrock-qwen.service -n 200 --no-pager`.
 
 ## systemd
 
@@ -188,6 +226,7 @@ BEDROCK_MCP_PORT=<allocated panel port>
 BEDROCK_MCP_DATA_DIR=/home/container/data
 BEDROCK_MCP_ALLOWED_HOSTS=<public hostname>
 BEDROCK_MCP_SEMANTIC_ENABLED=false
+BEDROCK_MCP_LOCAL_LLM_ENABLED=false
 ```
 
 Install/build during initial setup or an install script. Use normal `npm ci` when semantic retrieval is enabled:
@@ -210,6 +249,8 @@ Panel startup command:
 ```bash
 node dist/index.js serve
 ```
+
+To use the local helper in a Pterodactyl container, keep the llama-server binary and its Hugging Face cache on persistent storage, start it on 127.0.0.1:8081 before Node, and set BEDROCK_MCP_LOCAL_LLM_ENABLED=true plus the matching local-LLM values in the panel environment. A startup wrapper or supervisor must keep both processes alive; do not expose port 8081 as a public allocation.
 
 Initial knowledge setup from the Pterodactyl console:
 
