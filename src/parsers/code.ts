@@ -1,4 +1,4 @@
-import { extractIdentifiers } from "../identifiers/extract.js";
+import { extractCodeIdentifiers } from "../identifiers/extract.js";
 import type { ChunkDraft } from "../models/chunk.js";
 import type { SymbolKind } from "../models/enums.js";
 
@@ -43,19 +43,32 @@ function findBalancedEnd(lines: string[], startIndex: number): number {
         if (started && depth <= 0) return index;
       }
     }
+    if (!started && /;\s*$/.test(line)) return index;
   }
-  return Math.min(lines.length - 1, startIndex + 80);
+  return Math.min(lines.length - 1, startIndex + 100);
 }
 
 function importsPrefix(lines: string[]): string {
   const imports: string[] = [];
   let collecting = true;
+  let pending: string[] = [];
   for (const line of lines) {
     const trimmed = line.trim();
-    if (collecting && (trimmed.startsWith("import ") || trimmed.startsWith("export ") || trimmed.length === 0)) {
-      if (trimmed.startsWith("import ")) imports.push(line);
+    if (!collecting) break;
+    if (pending.length > 0) {
+      pending.push(line);
+      if (/;\s*$/.test(trimmed) || /from\s+["'][^"']+["']\s*;?\s*$/.test(trimmed)) {
+        imports.push(...pending);
+        pending = [];
+      }
       continue;
     }
+    if (trimmed.startsWith("import ")) {
+      if (/;\s*$/.test(trimmed) || /from\s+["'][^"']+["']\s*;?\s*$/.test(trimmed)) imports.push(line);
+      else pending = [line];
+      continue;
+    }
+    if (trimmed.length === 0 || trimmed.startsWith("//") || trimmed.startsWith("/*") || trimmed.startsWith("*")) continue;
     collecting = false;
   }
   return imports.join("\n");
@@ -65,27 +78,55 @@ function structuralSpans(lines: string[]): Span[] {
   const spans: Span[] = [];
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index] ?? "";
-    let match = /^\s*(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/.exec(line);
+    let match = /^\s*(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/.exec(line);
     if (match) {
       spans.push({ title: match[1] ?? "function", symbolKind: "function", startLine: index + 1, endLine: findBalancedEnd(lines, index) + 1 });
-      index = (spans.at(-1)?.endLine ?? index + 1) - 1;
       continue;
     }
 
-    match = /^\s*(?:export\s+)?class\s+([A-Za-z_$][\w$]*)/.exec(line);
+    match = /^\s*(?:export\s+)?(?:default\s+)?class\s+([A-Za-z_$][\w$]*)/.exec(line);
     if (match) {
       spans.push({ title: match[1] ?? "class", symbolKind: "class-code", startLine: index + 1, endLine: findBalancedEnd(lines, index) + 1 });
-      index = (spans.at(-1)?.endLine ?? index + 1) - 1;
       continue;
     }
 
-    match = /([A-Za-z_$][\w$.]*)\.subscribe\s*\(/.exec(line);
+    match = /^\s*(?:export\s+)?interface\s+([A-Za-z_$][\w$]*)/.exec(line);
+    if (match) {
+      spans.push({ title: match[1] ?? "interface", symbolKind: "interface", startLine: index + 1, endLine: findBalancedEnd(lines, index) + 1 });
+      continue;
+    }
+
+    match = /^\s*(?:export\s+)?(?:const\s+)?enum\s+([A-Za-z_$][\w$]*)/.exec(line);
+    if (match) {
+      spans.push({ title: match[1] ?? "enum", symbolKind: "enum", startLine: index + 1, endLine: findBalancedEnd(lines, index) + 1 });
+      continue;
+    }
+
+    match = /^\s*(?:export\s+)?type\s+([A-Za-z_$][\w$]*)\s*=/.exec(line);
+    if (match) {
+      spans.push({ title: match[1] ?? "type", symbolKind: "unknown", startLine: index + 1, endLine: findBalancedEnd(lines, index) + 1 });
+      continue;
+    }
+
+    match = /^\s*(?:export\s+)?(?:const|let)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>/.exec(line);
+    if (match) {
+      spans.push({ title: match[1] ?? "function", symbolKind: "function", startLine: index + 1, endLine: findBalancedEnd(lines, index) + 1 });
+      continue;
+    }
+
+    match = /([A-Za-z_$][\w$.]*(?:afterEvents|beforeEvents)[\w$.]*)\.subscribe\s*\(/.exec(line)
+      ?? /([A-Za-z_$][\w$.]*)\.subscribe\s*\(/.exec(line);
     if (match) {
       spans.push({ title: `${match[1] ?? "event"}.subscribe`, symbolKind: "event-handler", startLine: index + 1, endLine: findBalancedEnd(lines, index) + 1 });
-      index = (spans.at(-1)?.endLine ?? index + 1) - 1;
     }
   }
-  return spans;
+
+  const unique = new Map<string, Span>();
+  for (const span of spans) {
+    const key = `${span.startLine}:${span.endLine}:${span.title}`;
+    if (!unique.has(key)) unique.set(key, span);
+  }
+  return [...unique.values()].sort((a, b) => a.startLine - b.startLine || a.endLine - b.endLine);
 }
 
 export function parseCode(input: string, path: string): ChunkDraft[] {
@@ -104,7 +145,7 @@ export function parseCode(input: string, path: string): ChunkDraft[] {
         content: input,
         startLine: 1,
         endLine: lines.length,
-        identifiers: extractIdentifiers(input),
+        identifiers: extractCodeIdentifiers(input),
         stability: "stable",
         lifecycle: "active",
         language,
@@ -116,6 +157,8 @@ export function parseCode(input: string, path: string): ChunkDraft[] {
   return spans.map((span, ordinal) => {
     const body = lines.slice(span.startLine - 1, span.endLine).join("\n");
     const content = imports.length > 0 && !body.startsWith(imports) ? `${imports}\n\n${body}` : body;
+    const identifiers = new Set(extractCodeIdentifiers(content));
+    identifiers.add(span.title);
     return {
       ordinal,
       chunkType: "code-block" as const,
@@ -124,7 +167,7 @@ export function parseCode(input: string, path: string): ChunkDraft[] {
       content,
       startLine: span.startLine,
       endLine: span.endLine,
-      identifiers: extractIdentifiers(content),
+      identifiers: [...identifiers],
       stability: "stable" as const,
       lifecycle: "active" as const,
       language,

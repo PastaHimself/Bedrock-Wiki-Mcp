@@ -1,6 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 import { normalizeIdentifier } from "../identifiers/normalize.js";
 import type { DocumentKind } from "../models/enums.js";
+import { isNearDuplicateEvidence } from "./dedup.js";
 import { exactIdentifierSearch, type ExactIdentifierHit } from "./exact.js";
 import { detectBedrockQueryIntent, type BedrockQueryIntent } from "./intent.js";
 import { lexicalSearch, type LexicalSearchHit } from "./lexical.js";
@@ -134,7 +135,7 @@ export function knowledgeCandidateAllowed(candidate: KnowledgeFilterCandidate, o
 }
 
 function metadataBonus(candidate: Pick<Candidate, "sourceTier" | "stability" | "lifecycle" | "channel">): number {
-  let score = (5 - candidate.sourceTier) * 2.5;
+  let score = (5 - candidate.sourceTier) * 15;
   score += candidate.lifecycle === "active" ? 4 : candidate.lifecycle === "deprecated" ? -4 : candidate.lifecycle === "historical" ? -8 : 0;
   score += candidate.stability === "stable" ? 4 : candidate.stability === "beta" ? 1 : candidate.stability === "experimental" ? -2 : candidate.stability === "internal" ? -5 : 0;
   score += candidate.channel === "stable" ? 3 : candidate.channel === "preview" ? -2 : 0;
@@ -266,11 +267,8 @@ function fallbackLexicalSearch(database: DatabaseSync, query: string, wide = fal
   for (const term of meaningfulQueryTerms(query)) {
     for (const [rank, hit] of lexicalSearch(database, term, wide ? 30 : 15).entries()) {
       const existing = accumulated.get(hit.chunkId);
-      if (existing) {
-        existing.score += 1 / (rank + 1);
-      } else {
-        accumulated.set(hit.chunkId, { hit, score: 1 / (rank + 1) });
-      }
+      if (existing) existing.score += 1 / (rank + 1);
+      else accumulated.set(hit.chunkId, { hit, score: 1 / (rank + 1) });
     }
   }
   return [...accumulated.values()]
@@ -311,10 +309,8 @@ function mergeAdjacentCandidates(candidates: Candidate[]): Candidate[] {
 
   const consumed = new Set<string>();
   const merged: Candidate[] = [];
-
   for (const candidate of candidates) {
     if (consumed.has(candidate.chunkId)) continue;
-
     const byOrdinal = byDocumentOrdinal.get(candidate.documentId);
     const neighbors = [-1, 1]
       .map((offset) => byOrdinal?.get(candidate.ordinal + offset))
@@ -339,10 +335,7 @@ function mergeAdjacentCandidates(candidates: Candidate[]): Candidate[] {
 
     selected.sort((a, b) => a.ordinal - b.ordinal);
     const neighborIds = selected.filter((item) => item.chunkId !== candidate.chunkId).map((item) => item.chunkId);
-    const neighborScore = selected
-      .filter((item) => item.chunkId !== candidate.chunkId)
-      .reduce((sum, item) => sum + item.score, 0);
-
+    const neighborScore = selected.filter((item) => item.chunkId !== candidate.chunkId).reduce((sum, item) => sum + item.score, 0);
     merged.push({
       ...candidate,
       rawContent: selected.map((item) => item.rawContent).join("\n\n"),
@@ -351,7 +344,6 @@ function mergeAdjacentCandidates(candidates: Candidate[]): Candidate[] {
     });
     for (const item of selected) consumed.add(item.chunkId);
   }
-
   return merged;
 }
 
@@ -385,6 +377,22 @@ function publicResult(candidate: Candidate, excerpt: string): KnowledgeSearchRes
   };
 }
 
+function duplicateOfAccepted(candidate: Candidate, accepted: readonly Candidate[]): boolean {
+  return accepted.some((existing) => isNearDuplicateEvidence({
+    text: candidate.rawContent,
+    ...(candidate.identifier ? { identifier: candidate.identifier } : {}),
+    ...(candidate.apiVersion ? { apiVersion: candidate.apiVersion } : {}),
+    ...(candidate.minecraftVersion ? { minecraftVersion: candidate.minecraftVersion } : {}),
+    channel: candidate.channel,
+  }, {
+    text: existing.rawContent,
+    ...(existing.identifier ? { identifier: existing.identifier } : {}),
+    ...(existing.apiVersion ? { apiVersion: existing.apiVersion } : {}),
+    ...(existing.minecraftVersion ? { minecraftVersion: existing.minecraftVersion } : {}),
+    channel: existing.channel,
+  }));
+}
+
 export function searchKnowledge(database: DatabaseSync, options: KnowledgeSearchOptions): KnowledgeSearchResponse {
   const validated = validateOptions(options);
   const query = options.query.trim();
@@ -400,9 +408,7 @@ export function searchKnowledge(database: DatabaseSync, options: KnowledgeSearch
   let lexicalHits: LexicalSearchHit[] = [];
   try {
     lexicalHits = lexicalSearch(database, query, narrowFilter ? 100 : 50);
-    if (lexicalHits.length === 0 && meaningfulQueryTerms(query).length > 1) {
-      lexicalHits = fallbackLexicalSearch(database, query, narrowFilter);
-    }
+    if (lexicalHits.length === 0 && meaningfulQueryTerms(query).length > 1) lexicalHits = fallbackLexicalSearch(database, query, narrowFilter);
   } catch (error) {
     if (candidates.size === 0 && meaningfulQueryTerms(query).length > 0) {
       lexicalHits = fallbackLexicalSearch(database, query, narrowFilter);
@@ -434,6 +440,7 @@ export function searchKnowledge(database: DatabaseSync, options: KnowledgeSearch
 
   const perDocument = new Map<string, number>();
   const results: KnowledgeSearchResult[] = [];
+  const acceptedEvidence: Candidate[] = [];
   let totalChars = 0;
   let truncated = false;
 
@@ -444,6 +451,10 @@ export function searchKnowledge(database: DatabaseSync, options: KnowledgeSearch
     }
     const usedFromDocument = perDocument.get(candidate.documentId) ?? 0;
     if (usedFromDocument >= 2 && !candidate.exactMatch) continue;
+    if (duplicateOfAccepted(candidate, acceptedEvidence)) {
+      truncated = true;
+      continue;
+    }
 
     const remaining = validated.maxChars - totalChars;
     if (remaining < 200) {
@@ -453,6 +464,7 @@ export function searchKnowledge(database: DatabaseSync, options: KnowledgeSearch
     const perResultLimit = candidate.mergedChunkIds.length > 0 ? 2_400 : 1_600;
     const excerpt = excerptFor(candidate.rawContent, query, Math.min(perResultLimit, remaining));
     results.push(publicResult(candidate, excerpt));
+    acceptedEvidence.push(candidate);
     totalChars += excerpt.length;
     perDocument.set(candidate.documentId, usedFromDocument + 1);
   }
