@@ -2,7 +2,6 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { DatabaseSync } from "node:sqlite";
 import { toNodeHandler, type NodeIncomingMessageLike } from "@modelcontextprotocol/node";
 import { createMcpHandler } from "@modelcontextprotocol/server";
-import type { LocalLlm } from "./ai/local-llm.js";
 import { loadConfig, type AppConfig } from "./config.js";
 import { HEALTH_PATH, MCP_PATH, SERVICE_NAME, SERVICE_VERSION } from "./constants.js";
 import { HttpRequestGuard, type GuardRejection } from "./http/security.js";
@@ -13,7 +12,9 @@ export interface HttpServerOptions {
   database?: DatabaseSync;
   semantic?: SemanticRetriever;
   semanticTopK?: number;
-  localLlm?: LocalLlm;
+  /** @deprecated Ignored compatibility field from the removed local-answer runtime. */
+  localLlm?: unknown;
+  /** @deprecated Ignored compatibility field from the removed local-answer runtime. */
   localLlmRetrievalLimit?: number;
   config?: AppConfig;
 }
@@ -88,8 +89,6 @@ export function createHttpServer(options: HttpServerOptions = {}): Server {
       options.database,
       options.semantic,
       options.semanticTopK ?? config.semanticTopK,
-      options.localLlm,
-      options.localLlmRetrievalLimit ?? config.localLlmRetrievalLimit,
     ),
     {
       legacy: "stateless",
@@ -153,7 +152,7 @@ export function createHttpServer(options: HttpServerOptions = {}): Server {
   });
 
   server.headersTimeout = 10_000;
-  server.requestTimeout = Math.max(30_000, config.localLlmTimeoutMs + 10_000);
+  server.requestTimeout = 30_000;
   server.keepAliveTimeout = 5_000;
   handlers.set(server, mcpHandler);
   return server;
