@@ -11,6 +11,7 @@ interface SourceDefinition {
   branch: string;
   defaultEnabled?: boolean;
   sparsePaths?: string[];
+  include?: string[];
 }
 
 function loadSources(): SourceDefinition[] {
@@ -49,6 +50,13 @@ describe("source configuration", () => {
     expect(wiki?.branch).toBe("wiki");
     expect(wiki?.tier).toBe(3);
     expect(wiki?.sparsePaths).toEqual(["docs"]);
+
+    const examples = byId.get("bedrock_oss_examples");
+    expect(examples?.repository).toBe("https://github.com/Bedrock-OSS/bedrock-examples.git");
+    expect(examples?.tier).toBe(3);
+    expect(examples?.channel).toBe("stable");
+    expect(examples?.sparsePaths).toEqual(["resources"]);
+    expect(examples?.include).toContain("resources/**/*.json");
   });
 
   it("keeps beta schemas, protocol data, scripting samples, GameTests, and Editor material preview-only", () => {
