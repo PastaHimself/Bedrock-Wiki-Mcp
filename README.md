@@ -6,7 +6,7 @@ FRE USE: https://bedrockmcpwiki.servegame.net/mcp
 
 ## Status
 
-Milestones 0–9 are merged. The original implementation roadmap is complete, including the optional local semantic-search upgrade. The repository also includes administrative quality/operations tooling for status reporting, online backups, and repeatable retrieval benchmarks.
+The MCP is built as a Bedrock development knowledge service rather than a generic document search server. It combines official Creator documentation, official samples/tools/schemas, official `@minecraft/*` npm package metadata, selected community material, exact identifier indexing, version/channel-aware retrieval, conservative deduplication, and optional local semantic search.
 
 The server currently provides:
 
@@ -16,27 +16,33 @@ The server currently provides:
 - health endpoint at `/health`
 - SQLite + FTS5 persistence and lexical retrieval
 - Bedrock-aware Markdown, Script API, JSON, JavaScript, and TypeScript ingestion
-- exact identifier lookup plus natural-language FTS search
+- code-aware TypeScript/JavaScript chunks for functions, classes, interfaces, enums, aliases, arrow functions, and event subscriptions
+- exact identifier lookup for Script API symbols, Bedrock namespaced identifiers, Molang, commands, manifest/schema fields, and animation-controller states
 - derived Script API aliases such as `world.afterEvents.playerSpawn`
 - stable/preview/historical metadata and ranking
+- authoritative read-only npm metadata snapshots for verified `@minecraft/*` Script API modules
 - Minecraft/API version-compatible filtering and ranking
-- optional local Transformers.js + sqlite-vec semantic retrieval
+- intent-aware ranking for definitions, examples, manifests, package versions, debugging, stable, and preview questions
+- conservative cross-source duplicate suppression that preserves distinct versions/channels
+- optional local Transformers.js + sqlite-vec semantic retrieval with lexical fallback
 - controlled `doc_*` / `chk_*` fetching; no arbitrary filesystem reads
+- section-aware fetch context and code/example evidence from `get_definition`
 - verified Microsoft/Mojang Git source ingestion plus lower-ranked community knowledge
 - safe administrative source clone/fetch/fast-forward synchronization
+- source health, provenance, duplicate percentage, and indexing timestamps through `list_sources`
 - online SQLite backups with retention
-- measurable retrieval quality benchmarks
+- stable and preview retrieval quality suites with per-question rank gates
 - no paid API, embedding API, or hosted vector database required
 
 ## Public MCP tools
 
 The public surface intentionally stays small and read-only:
 
-- `search` — exact + lexical search, optionally fused with local semantic retrieval
-- `fetch` — fetch server-issued document/chunk IDs with bounded context
-- `get_definition` — exact identifier lookup with stable-first, version-aware handling
-- `list_sources` — indexed source provenance and trust tiers
-- `list_categories` — categories currently present in the index
+- `search` — exact + lexical search, optionally fused with local semantic retrieval; supports optional source/category/channel/module/path/version filters
+- `fetch` — fetch server-issued document/chunk IDs with bounded adjacent or heading-section context
+- `get_definition` — exact identifier lookup with stable-first, version-aware handling plus relevant indexed code/examples
+- `list_sources` — indexed source provenance, trust tiers, release channel, counts, health, duplicate percentage, revision, and last indexing time
+- `list_categories` — controlled Bedrock development categories currently present in the index
 
 The public MCP server does **not** expose arbitrary file reads, shell commands, database writes, source synchronization, backup, benchmark, status administration, or index-update operations.
 
@@ -50,9 +56,13 @@ world.afterEvents.playerSpawn.subscribe
 system.runInterval
 ```
 
-Stable Microsoft/Mojang material has priority over preview, historical, or community material. Preview/historical content is excluded from normal retrieval unless explicitly requested or clearly implied by the query. The semantic path follows the same release-channel intent rules as lexical search.
+Identifier extraction also understands module-qualified imports such as `@minecraft/server.Player`, namespaced Bedrock component identifiers, Molang queries such as `query.is_on_ground`, slash commands, `format_version` values, manifest fields, schema properties, and animation-controller state names.
+
+Stable Microsoft/Mojang material has priority over preview, historical, or community material. Preview/historical content is excluded from normal retrieval unless explicitly requested or clearly implied by the query. Version/package questions receive additional preference for official npm metadata, while example/tutorial queries prefer real code and sample evidence. The semantic path follows the same release-channel and filter rules as lexical search.
 
 Optional `minecraftVersion` and `apiVersion` constraints prefer exact provenance, allow compatible numeric prefixes, reject known mismatches, and retain unversioned material only as lower-ranked fallback evidence.
+
+Cross-source near-duplicate suppression is deliberately conservative. It removes essentially equivalent search evidence after ranking so the higher-trust result survives, but it does not collapse material across different release channels, API versions, Minecraft versions, or conflicting identifiers.
 
 ### Optional semantic search
 
@@ -90,15 +100,15 @@ Then enable hybrid retrieval:
 BEDROCK_MCP_SEMANTIC_ENABLED=true
 ```
 
-`semantic.db` stores a fingerprint of the exact lexical/core index it was built from. The server refuses stale, wrong-model, wrong-dimension, or wrong-schema semantic databases instead of silently combining inconsistent indexes.
+`semantic.db` stores a fingerprint of the exact lexical/core index it was built from. The server refuses stale, wrong-model, wrong-dimension, or wrong-schema semantic databases instead of silently combining inconsistent indexes. If optional semantic initialization fails, serving degrades to the lexical SQLite/FTS5 path instead of taking the MCP offline.
 
-Low-RAM deployments should leave semantic retrieval disabled and may use `npm ci --omit=optional`. The five public MCP tools and lexical behavior remain available without loading or installing the embedding model/vector runtime.
+For constrained servers, keep the model cache and `semantic.db` on persistent storage and use the default MiniLM-class model rather than a substantially larger embedding model. Semantic retrieval remains optional; the five public tools and exact/lexical behavior are fully available without it.
 
 ## Knowledge sources
 
-`config/sources.json` defines the upstream ingestion targets and their trust/release boundaries.
+`config/sources.json` defines the upstream Git ingestion targets and their trust/release boundaries. `config/npm-sources.json` separately defines bounded snapshots from the official npm registry for verified Minecraft Script API packages.
 
-Stable/default-enabled sources:
+Stable/default-enabled Git sources:
 
 1. `MicrosoftDocs/minecraft-creator` — Tier 1 Creator docs, commands, references, current Script API, and prior Script API.
 2. `Mojang/bedrock-samples` `main` — Tier 2 stable behavior/resource pack samples.
@@ -106,20 +116,26 @@ Stable/default-enabled sources:
 4. `Mojang/minecraft-scripting-libraries` — Tier 2 official reusable scripting libraries and examples.
 5. `Mojang/minecraft-debugger` — Tier 2 Bedrock scripting/BDS debugger and diagnostics documentation.
 6. `Mojang/minecraft-creator-tools` — Tier 3 targeted Creator Tools documentation.
-7. `Bedrock-OSS/bedrock-wiki` `wiki` — Tier 3 community documentation. Sparse checkout selects its `docs/` knowledge subtree (Git cone mode may retain repository-root files), and only Markdown knowledge is indexed, so community material cannot outrank higher-tier official material on equal lifecycle/channel evidence.
+7. `Bedrock-OSS/bedrock-wiki` `wiki` — Tier 3 community documentation. Sparse checkout selects its `docs/` knowledge subtree, and only Markdown knowledge is indexed.
+8. `Bedrock-OSS/bedrock-examples` — Tier 3 maintained behavior/resource-pack example companion to Bedrock Wiki. Sparse checkout selects `resources/`, and include rules retain only JSON, JavaScript, TypeScript, mcfunction, and Markdown evidence rather than binary assets.
+
+Stable npm metadata is enabled by default for verified modules including `@minecraft/server`, `@minecraft/server-ui`, and `@minecraft/common`. It preserves exact npm versions/dist-tags and generates stable manifest dependency evidence where appropriate.
 
 Preview-only sources are selected only with `--include-preview` / `BEDROCK_MCP_INCLUDE_PREVIEW=true`:
 
 - `Mojang/bedrock-samples` `preview`.
 - `Mojang/bedrock-schemas` `main` — machine-readable Behavior Pack/Resource Pack JSON Schemas. The upstream head is currently preview-oriented, so it is not treated as stable.
-- `Mojang/bedrock-protocol-docs` `main` — current packet/type/enum metadata and protocol guides. The current Git head is preview-oriented; versioned GitHub Release assets are not silently treated as the stable worktree.
+- `Mojang/bedrock-protocol-docs` `main` — current packet/type/enum metadata and protocol guides. The current Git head is preview-oriented.
 - `microsoft/minecraft-scripting-samples` — Beta Script API examples.
 - `microsoft/minecraft-gametests` — Beta GameTest examples.
 - `Mojang/minecraft-editor`, `Mojang/minecraft-editor-extension-samples`, and `Mojang/minecraft-editor-extension-starter-kit` — Editor/extension material, which is Preview-specific upstream.
+- official npm beta/RC metadata for verified modules such as `@minecraft/server`, `@minecraft/server-ui`, `@minecraft/server-editor`, `@minecraft/server-gametest`, and other configured `@minecraft/*` packages.
+
+Preview npm versions are stored as exact package/type-definition evidence. The MCP does not assume that a full npm Preview build suffix is automatically a valid `manifest.json` dependency version; manifest guidance must be supported by matching official documentation/sample evidence.
 
 JSON Schema ingestion creates individual definition chunks for schema properties such as `minecraft:collision_box`. Protocol-style JSON Schemas also expose packet/type names and scoped properties as exact identifiers and preserve `x-minecraft-version` metadata for version-aware retrieval.
 
-Source trust tier, release channel, repository, branch, revision, canonical URL, revision URL, and hashes are preserved as provenance where available.
+Source trust tier, release channel, repository, branch, revision, canonical URL, revision URL, hashes, and indexing timestamps are preserved as provenance where available.
 
 ## Development
 
@@ -143,8 +159,7 @@ npm ci --omit=optional
 npm run build
 ```
 
-This build path never installs the local embedding/vector stack. Run the built
-server with `node dist/index.js serve`.
+This build path never installs the local embedding/vector stack. Run the built server with `node dist/index.js serve`.
 
 Run the development server:
 
@@ -161,7 +176,7 @@ http://127.0.0.1:8080/health
 
 ## Source synchronization and indexing
 
-Stable/default-enabled upstream sources:
+Stable/default-enabled upstream sources and official stable npm metadata:
 
 ```bash
 npm run dev -- sync-sources
@@ -169,18 +184,24 @@ npm run dev -- rebuild-sources
 npm run dev -- validate-index
 ```
 
-Include preview sources explicitly:
+Include all configured preview Git/npm sources explicitly:
 
 ```bash
 npm run dev -- sync-sources --include-preview
 npm run dev -- rebuild-sources --include-preview
 ```
 
+The environment equivalent is:
+
+```text
+BEDROCK_MCP_INCLUDE_PREVIEW=true
+```
+
 A custom checkout root can be supplied as the positional argument to both source commands.
 
 Synchronization is fail-closed: existing checkouts must have the configured origin and branch, a resolvable revision, and a clean worktree. Updates are fast-forward-only. Dirty, locally-ahead, divergent, detached, wrong-origin, wrong-branch, symlinked, or otherwise invalid checkouts are rejected rather than reset.
 
-New clones use blobless single-branch partial clones. Whole-repository sources keep their normal worktree. `sparsePaths` is opt-in per source and is used only where the registry explicitly identifies a safe documentation/schema subtree, such as `Bedrock-OSS/bedrock-wiki` `docs/`; it is not applied globally to Bedrock Samples.
+New clones use blobless single-branch partial clones. Whole-repository sources keep their normal worktree. `sparsePaths` is opt-in per source and is used only where the registry explicitly identifies a useful subtree; large binary/assets-only material is excluded from the Bedrock OSS example source through include rules.
 
 `rebuild-sources` builds a separate SQLite database and only replaces the published index after validation succeeds. If semantic retrieval is enabled, rebuild `semantic.db` after publishing a new lexical index; the production updater does this automatically.
 
@@ -201,7 +222,7 @@ npm run dev -- status
 npm run dev -- status --json
 ```
 
-`status` reports schema/integrity state, database size, document/chunk/identifier counts, FTS consistency, and per-source revision/coverage.
+`status` reports schema/integrity state, database size, document/chunk/identifier counts, FTS consistency, and per-source revision/coverage. The public `list_sources` tool additionally exposes read-only source health, last indexing time, and exact duplicate-chunk percentage.
 
 Create an online-consistent backup using Node's SQLite backup API:
 
@@ -212,14 +233,25 @@ npm run dev -- backup /srv/bedrock-backups --retain=14
 
 A snapshot contains `bedrock.db`, `semantic.db` when present, repository `config/`, curated `knowledge/local/`, and a manifest. Symlinks and non-regular files in copied project material are skipped. The default destination is `data/backups/` with seven retained snapshots. Production scheduled refreshes create this backup **before** source synchronization/rebuild.
 
-Run the committed retrieval-quality suite against the currently published lexical index:
+Run the stable/default retrieval-quality suite against a published stable index:
 
 ```bash
 npm run dev -- benchmark
 npm run dev -- benchmark --json
 ```
 
-The default suite is `benchmarks/search-queries.json`. It covers core exact/runtime-chain and natural-language Bedrock queries and reports MRR, Recall@3, Recall@5, NDCG@5, exact Top-1, natural Top-3, and useful Top-5. The command exits nonzero when configured quality targets fail, so it can be used as a deployment/release gate after a real official-source index has been built.
+The default suite is `benchmarks/search-queries.json`. It covers exact Script API/runtime chains, Bedrock components, Molang, manifests, stable npm module/version questions, dynamic properties, commands, scoreboard/dimensions, animations, and natural-language development tasks.
+
+For a comprehensive index built with preview sources enabled, run the dedicated preview/beta suite:
+
+```bash
+npm run dev -- benchmark benchmarks/search-queries-preview.json
+npm run dev -- benchmark benchmarks/search-queries-preview.json --json
+```
+
+The preview suite covers current beta `@minecraft/*` package metadata, `PlayerInputPermissions`, GameTest, Editor extensions, schemas, protocol documentation, preview Bedrock samples, and beta scripting samples.
+
+Benchmarks report MRR, Recall@3, Recall@5, NDCG@5, exact Top-1, natural Top-3, and useful Top-5. Relevance can require the correct identifier, source, category, channel, module, or path. Critical cases also use `requiredTopK`, and **every required case must pass** in addition to the aggregate thresholds. The command exits nonzero when either aggregate targets or a required rank gate fails.
 
 ## Production deployment
 
