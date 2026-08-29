@@ -21,15 +21,6 @@ describe("loadConfig", () => {
       semanticEnabled: false,
       semanticModel: "onnx-community/all-MiniLM-L6-v2-ONNX",
       semanticTopK: 40,
-      localLlmEnabled: true,
-      localLlmBaseUrl: "http://127.0.0.1:8081/v1",
-      localLlmBinary: "llama-server",
-      localLlmModel: "Qwen/Qwen3-1.7B-GGUF:Q8_0",
-      localLlmThreads: 2,
-      localLlmStartupTimeoutMs: 900000,
-      localLlmTimeoutMs: 60000,
-      localLlmMaxTokens: 512,
-      localLlmRetrievalLimit: 6,
     });
   });
 
@@ -52,15 +43,6 @@ describe("loadConfig", () => {
         BEDROCK_MCP_SEMANTIC_ENABLED: "true",
         BEDROCK_MCP_SEMANTIC_MODEL: "example/model",
         BEDROCK_MCP_SEMANTIC_TOP_K: "25",
-        BEDROCK_MCP_LOCAL_LLM_ENABLED: "true",
-        BEDROCK_MCP_LOCAL_LLM_BASE_URL: "http://127.0.0.1:9090/v1/",
-        BEDROCK_MCP_LOCAL_LLM_BINARY: "/opt/llama-server",
-        BEDROCK_MCP_LOCAL_LLM_MODEL: "local/qwen",
-        BEDROCK_MCP_LOCAL_LLM_THREADS: "4",
-        BEDROCK_MCP_LOCAL_LLM_STARTUP_TIMEOUT_MS: "120000",
-        BEDROCK_MCP_LOCAL_LLM_TIMEOUT_MS: "45000",
-        BEDROCK_MCP_LOCAL_LLM_MAX_TOKENS: "256",
-        BEDROCK_MCP_LOCAL_LLM_RETRIEVAL_LIMIT: "4",
       },
       "/ignored",
     );
@@ -82,16 +64,17 @@ describe("loadConfig", () => {
       semanticEnabled: true,
       semanticModel: "example/model",
       semanticTopK: 25,
-      localLlmEnabled: true,
-      localLlmBaseUrl: "http://127.0.0.1:9090/v1/",
-      localLlmBinary: "/opt/llama-server",
-      localLlmModel: "local/qwen",
-      localLlmThreads: 4,
-      localLlmStartupTimeoutMs: 120000,
-      localLlmTimeoutMs: 45000,
-      localLlmMaxTokens: 256,
-      localLlmRetrievalLimit: 4,
     });
+  });
+
+  it("ignores legacy local-LLM variables instead of starting an answer model", () => {
+    const config = loadConfig({
+      BEDROCK_MCP_LOCAL_LLM_ENABLED: "true",
+      BEDROCK_MCP_LOCAL_LLM_MODEL: "Qwen/legacy",
+    });
+
+    expect(config).not.toHaveProperty("localLlmEnabled");
+    expect(config).not.toHaveProperty("localLlmModel");
   });
 
   it.each(["0", "65536", "not-a-port"])("rejects invalid port %s", (port) => {
@@ -106,14 +89,5 @@ describe("loadConfig", () => {
     expect(() => loadConfig({ BEDROCK_MCP_INCLUDE_PREVIEW: "yes" })).toThrow();
     expect(() => loadConfig({ BEDROCK_MCP_SEMANTIC_ENABLED: "yes" })).toThrow();
     expect(() => loadConfig({ BEDROCK_MCP_SEMANTIC_TOP_K: "101" })).toThrow();
-    expect(() => loadConfig({ BEDROCK_MCP_LOCAL_LLM_ENABLED: "yes" })).toThrow();
-    expect(() => loadConfig({ BEDROCK_MCP_LOCAL_LLM_BINARY: "" })).toThrow();
-    expect(() => loadConfig({ BEDROCK_MCP_LOCAL_LLM_THREADS: "0" })).toThrow();
-    expect(() => loadConfig({ BEDROCK_MCP_LOCAL_LLM_THREADS: "33" })).toThrow();
-    expect(() => loadConfig({ BEDROCK_MCP_LOCAL_LLM_STARTUP_TIMEOUT_MS: "9999" })).toThrow();
-    expect(() => loadConfig({ BEDROCK_MCP_LOCAL_LLM_TIMEOUT_MS: "999" })).toThrow();
-    expect(() => loadConfig({ BEDROCK_MCP_LOCAL_LLM_MAX_TOKENS: "513" })).toThrow();
-    expect(() => loadConfig({ BEDROCK_MCP_LOCAL_LLM_RETRIEVAL_LIMIT: "9" })).toThrow();
-    expect(() => loadConfig({ BEDROCK_MCP_LOCAL_LLM_BASE_URL: "https://example.com/v1" })).toThrow();
   });
 });
