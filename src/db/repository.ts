@@ -26,8 +26,8 @@ export class IndexRepository {
   upsertSource(source: SourceDescriptor): void {
     const sourceType = source.sourceType ?? (source.repository ? "git" : "local");
     this.#database.prepare(`
-      INSERT INTO sources(id, name, source_type, tier, repository, branch, channel, current_revision, config_json)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO sources(id, name, source_type, tier, repository, branch, channel, current_revision, last_indexed_at, config_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         name = excluded.name,
         source_type = excluded.source_type,
@@ -36,6 +36,7 @@ export class IndexRepository {
         branch = excluded.branch,
         channel = excluded.channel,
         current_revision = excluded.current_revision,
+        last_indexed_at = excluded.last_indexed_at,
         config_json = excluded.config_json
     `).run(
       source.id,
@@ -46,6 +47,7 @@ export class IndexRepository {
       source.branch ?? null,
       source.channel,
       source.revision ?? null,
+      new Date().toISOString(),
       JSON.stringify(source),
     );
   }

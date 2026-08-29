@@ -4,9 +4,11 @@ const DOCUMENT_ID = /^doc_[a-f0-9]{24}$/;
 const CHUNK_ID = /^chk_[a-f0-9]{24}$/;
 
 export type FetchTargetKind = "document" | "chunk";
+export type FetchContextMode = "adjacent" | "section";
 
 export interface FetchKnowledgeOptions {
   id: string;
+  contextMode?: FetchContextMode;
   contextBefore?: number;
   contextAfter?: number;
   maxChars?: number;
@@ -16,6 +18,7 @@ export interface FetchChunk {
   chunkId: string;
   ordinal: number;
   title: string;
+  headingPath: string[];
   identifier?: string;
   chunkType: string;
   content: string;
@@ -28,6 +31,7 @@ export interface FetchChunk {
 
 export interface FetchKnowledgeResult {
   targetKind: FetchTargetKind;
+  contextMode: FetchContextMode;
   documentId: string;
   requestedChunkId?: string;
   title: string;
@@ -80,6 +84,7 @@ interface ChunkRow {
   chunk_id: string;
   ordinal: number;
   title: string;
+  heading_path: string;
   identifier: string | null;
   chunk_type: string;
   content: string;
@@ -128,11 +133,42 @@ function documentFromChunkId(database: DatabaseSync, id: string): (DocumentRow &
   `).get(id) as (DocumentRow & { requested_ordinal: number }) | undefined;
 }
 
+function allChunks(database: DatabaseSync, documentId: number): ChunkRow[] {
+  return database.prepare(`
+    SELECT chunk_id, ordinal, title, heading_path, identifier, chunk_type, content, start_line, end_line,
+      json_pointer, stability, lifecycle
+    FROM chunks
+    WHERE document_id = ?
+    ORDER BY ordinal ASC
+  `).all(documentId) as unknown as ChunkRow[];
+}
+
+function parseHeadingPath(value: string): string[] {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function sectionRows(rows: readonly ChunkRow[], requestedOrdinal: number): ChunkRow[] {
+  const target = rows.find((row) => row.ordinal === requestedOrdinal);
+  if (!target) return [];
+  const targetPath = parseHeadingPath(target.heading_path);
+  if (targetPath.length === 0) return [target];
+  const depth = Math.min(2, targetPath.length);
+  const key = targetPath.slice(0, depth).join("\u0000");
+  const section = rows.filter((row) => parseHeadingPath(row.heading_path).slice(0, depth).join("\u0000") === key);
+  return section.length > 0 ? section : [target];
+}
+
 function mapChunk(row: ChunkRow, content: string): FetchChunk {
   return {
     chunkId: row.chunk_id,
     ordinal: row.ordinal,
     title: row.title,
+    headingPath: parseHeadingPath(row.heading_path),
     ...(row.identifier ? { identifier: row.identifier } : {}),
     chunkType: row.chunk_type,
     content,
@@ -146,6 +182,7 @@ function mapChunk(row: ChunkRow, content: string): FetchChunk {
 
 export function fetchKnowledge(database: DatabaseSync, options: FetchKnowledgeOptions): FetchKnowledgeResult {
   const id = options.id.trim();
+  const contextMode = options.contextMode ?? "adjacent";
   const contextBefore = validateBound(options.contextBefore, "contextBefore", 1);
   const contextAfter = validateBound(options.contextAfter, "contextAfter", 1);
   const maxChars = validateMaxChars(options.maxChars);
@@ -159,29 +196,16 @@ export function fetchKnowledge(database: DatabaseSync, options: FetchKnowledgeOp
     const resolved = documentFromChunkId(database, id);
     if (!resolved) throw new Error("NOT_FOUND: chunk ID does not exist");
     document = resolved;
-    rows = database.prepare(`
-      SELECT chunk_id, ordinal, title, identifier, chunk_type, content, start_line, end_line,
-        json_pointer, stability, lifecycle
-      FROM chunks
-      WHERE document_id = ? AND ordinal BETWEEN ? AND ?
-      ORDER BY ordinal ASC
-    `).all(
-      document.id,
-      Math.max(0, resolved.requested_ordinal - contextBefore),
-      resolved.requested_ordinal + contextAfter,
-    ) as unknown as ChunkRow[];
+    const documentChunks = allChunks(database, document.id);
+    rows = contextMode === "section"
+      ? sectionRows(documentChunks, resolved.requested_ordinal)
+      : documentChunks.filter((row) => row.ordinal >= Math.max(0, resolved.requested_ordinal - contextBefore) && row.ordinal <= resolved.requested_ordinal + contextAfter);
   } else if (DOCUMENT_ID.test(id)) {
     targetKind = "document";
     const resolved = documentFromId(database, id);
     if (!resolved) throw new Error("NOT_FOUND: document ID does not exist");
     document = resolved;
-    rows = database.prepare(`
-      SELECT chunk_id, ordinal, title, identifier, chunk_type, content, start_line, end_line,
-        json_pointer, stability, lifecycle
-      FROM chunks
-      WHERE document_id = ?
-      ORDER BY ordinal ASC
-    `).all(document.id) as unknown as ChunkRow[];
+    rows = allChunks(database, document.id);
   } else {
     throw new Error("INVALID_DOCUMENT_ID: fetch accepts only server-issued doc_* or chk_* IDs");
   }
@@ -208,6 +232,7 @@ export function fetchKnowledge(database: DatabaseSync, options: FetchKnowledgeOp
 
   return {
     targetKind,
+    contextMode,
     documentId: document.document_id,
     ...(targetKind === "chunk" ? { requestedChunkId: id } : {}),
     title: document.title,

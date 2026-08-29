@@ -58,6 +58,11 @@ function database() {
     content: "# Item Use Events\n## Listen for item use events\nItem use events let scripts detect when an item is used.\n## React to item use events\nItem use events can trigger custom gameplay logic.",
   }));
   repository.replaceDocument(ingestDocument({
+    source: official,
+    path: "scripts/main.ts",
+    content: "import { system } from '@minecraft/server';\n\nexport function start() {\n  system.runInterval(() => {}, 20);\n}",
+  }));
+  repository.replaceDocument(ingestDocument({
     source: preview,
     path: "creator/ScriptAPI/minecraft/server/SystemPreview.md",
     content: "# System Class\n## Methods\n::: moniker range=\"=minecraft-bedrock-experimental\"\n### **runInterval**\n`runInterval(callback: () => void): number;`\nPreview behavior.\n::: moniker-end",
@@ -101,30 +106,31 @@ describe("knowledge retrieval", () => {
   it("allows preview results when explicitly requested or clearly requested by query intent", () => {
     const explicit = searchKnowledge(database(), { query: "System.runInterval", includePreview: true, limit: 10 });
     expect(explicit.results.some((hit) => hit.channel === "preview")).toBe(true);
-
     const inferred = searchKnowledge(database(), { query: "experimental System runInterval", limit: 10 });
     expect(inferred.results.some((hit) => hit.channel === "preview")).toBe(true);
   });
 
-  it("fetches only controlled IDs and includes bounded adjacent chunk context", () => {
+  it("fetches controlled IDs with adjacent or heading-section context", () => {
     const db = database();
-    const result = searchKnowledge(db, { query: "minecraft:health" });
-    const health = result.results.find((hit) => hit.identifier === "minecraft:health");
-    expect(health).toBeDefined();
+    const result = searchKnowledge(db, { query: "System.runInterval" });
+    const target = result.results[0];
+    expect(target).toBeDefined();
 
-    const fetched = fetchKnowledge(db, { id: health?.chunkId ?? "", contextBefore: 0, contextAfter: 1, maxChars: 4000 });
-    expect(fetched.targetKind).toBe("chunk");
-    expect(fetched.requestedChunkId).toBe(health?.chunkId);
-    expect(fetched.chunks.length).toBeGreaterThanOrEqual(1);
-    expect(fetched.totalChars).toBeLessThanOrEqual(4000);
+    const adjacent = fetchKnowledge(db, { id: target?.chunkId ?? "", contextBefore: 0, contextAfter: 1, maxChars: 4000 });
+    expect(adjacent.contextMode).toBe("adjacent");
+    expect(adjacent.chunks[0]?.headingPath).toBeDefined();
+    const section = fetchKnowledge(db, { id: target?.chunkId ?? "", contextMode: "section", maxChars: 4000 });
+    expect(section.contextMode).toBe("section");
+    expect(section.chunks.some((chunk) => chunk.identifier === "System.runInterval")).toBe(true);
     expect(() => fetchKnowledge(db, { id: "/etc/passwd" })).toThrow("INVALID_DOCUMENT_ID");
   });
 
-  it("returns stable definitions and explicitly falls back to preview when stable is absent", () => {
+  it("returns stable definitions, relevant code examples, and explicit preview fallback", () => {
     const db = database();
     const stable = getDefinition(db, { identifier: "System.runInterval" });
     expect(stable.stableDefinitionFound).toBe(true);
     expect(stable.definitions[0]?.channel).toBe("stable");
+    expect(stable.examples.some((example) => example.path === "scripts/main.ts")).toBe(true);
 
     const repository = new IndexRepository(db);
     repository.replaceDocument(ingestDocument({
@@ -138,14 +144,19 @@ describe("knowledge retrieval", () => {
     expect(fallback.warning).toContain("No current stable definition");
   });
 
-  it("lists indexed sources and categories with counts", () => {
+  it("lists indexed source health, duplicate metrics, and controlled categories", () => {
     const db = database();
     const sources = listKnowledgeSources(db);
-    expect(sources.find((source) => source.id === "official")?.tier).toBe(1);
-    expect(sources.find((source) => source.id === "official")?.documents).toBe(3);
+    const source = sources.find((item) => item.id === "official");
+    expect(source?.tier).toBe(1);
+    expect(source?.documents).toBe(4);
+    expect(source?.health).toBe("healthy");
+    expect(source?.lastIndexedAt).toBeDefined();
+    expect(source?.duplicatePercent).toBeGreaterThanOrEqual(0);
 
     const categories = listKnowledgeCategories(db);
-    expect(categories.some((category) => category.id === "script_api")).toBe(true);
+    expect(categories.some((category) => category.id === "script_api_stable")).toBe(true);
+    expect(categories.some((category) => category.id === "script_api_beta")).toBe(true);
     expect(categories.some((category) => category.id === "entities")).toBe(true);
   });
 });
