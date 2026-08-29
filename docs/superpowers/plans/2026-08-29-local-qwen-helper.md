@@ -73,7 +73,7 @@ Files:
 
 Work:
 
-- Document installing/building llama.cpp, the official Qwen3 GGUF launch command, loopback binding, 4K context, one-request concurrency, the optional supervised systemd unit, and the smaller-model fallback.
+- Document installing/building llama.cpp, automatic first-run model download through `llama-server -hf`, loopback binding, 4K context, one-request concurrency, the optional supervised systemd unit, and the smaller-model fallback.
 - State that the model cache consumes disk and that the application remains usable without the optional helper.
 
 ## 6. Verify and publish

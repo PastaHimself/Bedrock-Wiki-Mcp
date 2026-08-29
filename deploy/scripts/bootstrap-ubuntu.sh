@@ -107,6 +107,7 @@ if ! getent passwd "$SERVICE_USER" >/dev/null; then
 fi
 
 install -d -o "$SERVICE_USER" -g "$SERVICE_USER" -m 0750 "$DATA_DIR"
+install -d -o "$SERVICE_USER" -g "$SERVICE_USER" -m 0750 "$DATA_DIR/models/huggingface"
 [[ ! -L "$CONFIG_DIR" ]] || fail "refusing symlinked configuration directory: $CONFIG_DIR"
 install -d -o root -g "$SERVICE_USER" -m 0750 "$CONFIG_DIR"
 install -d -o root -g root -m 0755 "$(dirname -- "$APP_DIR")"

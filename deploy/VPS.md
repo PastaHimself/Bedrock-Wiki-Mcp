@@ -69,6 +69,15 @@ It performs these operations:
 
 The semantic optional dependency set is never installed in this VPS profile, reducing download size and staged peak disk use. The installed runtime is pruned back to lexical production dependencies, and `BEDROCK_MCP_SEMANTIC_ENABLED=false` remains mandatory for this profile.
 
+The default local Qwen helper also requires a current `llama.cpp` build with `llama-server` installed before the service is enabled. Install the executable at `/usr/local/bin/llama-server` (or set `BEDROCK_MCP_LOCAL_LLM_BINARY` in `/etc/bedrock-mcp/bedrock-mcp.env`) and verify it before running the bootstrap:
+
+```bash
+sudo install -m 0755 /path/to/llama-server /usr/local/bin/llama-server
+/usr/local/bin/llama-server --version
+```
+
+The MCP service starts that executable automatically and downloads Qwen3 into `/var/lib/bedrock-mcp/models/huggingface` on its first start. The model is not bundled in the Git checkout.
+
 The initial knowledge build can take substantially longer than the application install because it synchronizes the configured Bedrock repositories and builds the SQLite/FTS5 index.
 
 ## Required small-VPS environment
