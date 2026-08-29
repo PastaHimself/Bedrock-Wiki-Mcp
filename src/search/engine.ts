@@ -135,7 +135,7 @@ export function knowledgeCandidateAllowed(candidate: KnowledgeFilterCandidate, o
 }
 
 function metadataBonus(candidate: Pick<Candidate, "sourceTier" | "stability" | "lifecycle" | "channel">): number {
-  let score = (5 - candidate.sourceTier) * 2.5;
+  let score = (5 - candidate.sourceTier) * 15;
   score += candidate.lifecycle === "active" ? 4 : candidate.lifecycle === "deprecated" ? -4 : candidate.lifecycle === "historical" ? -8 : 0;
   score += candidate.stability === "stable" ? 4 : candidate.stability === "beta" ? 1 : candidate.stability === "experimental" ? -2 : candidate.stability === "internal" ? -5 : 0;
   score += candidate.channel === "stable" ? 3 : candidate.channel === "preview" ? -2 : 0;
