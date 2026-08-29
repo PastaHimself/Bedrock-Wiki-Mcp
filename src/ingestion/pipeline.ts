@@ -29,8 +29,21 @@ function firstMetadataValue(frontMatter: Record<string, string>, keys: readonly 
   return undefined;
 }
 
+function categoryForSource(category: string, source: SourceDescriptor): string {
+  if (category === "script_api") return source.channel === "preview" ? "script_api_beta" : "script_api_stable";
+  if (category !== "documentation" && category !== "scripting" && category !== "json" && category !== "other") return category;
+  if (source.id.includes("gametest")) return "gametest";
+  if (source.id.includes("editor")) return "editor";
+  if (source.id.includes("schema")) return "schemas";
+  if (source.id.includes("debugger")) return "debugging";
+  if (source.id.includes("protocol")) return "networking_protocol";
+  if (source.id.includes("creator_tools")) return "creator_tools";
+  return category;
+}
+
 export function ingestDocument(input: IngestInput): ParsedDocument {
   const classification = classifyPath(input.path);
+  const category = categoryForSource(classification.category, input.source);
   let title = input.path.split("/").at(-1) ?? input.path;
   let description: string | undefined;
   let apiPackage: string | undefined;
@@ -88,7 +101,7 @@ export function ingestDocument(input: IngestInput): ParsedDocument {
       path: input.path,
       title,
       kind: classification.kind,
-      category: classification.category,
+      category,
       language: classification.language,
       channel: input.source.channel,
       stability,
