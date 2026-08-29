@@ -20,15 +20,26 @@ const RENDER_CONTROLLER_FIELDS = new Set([
   "on_fire_color", "light_color_multiplier", "uv_anim", "arrays",
 ]);
 
+function addRaw(values: Map<string, string>, value: string): void {
+  const normalized = normalizeIdentifier(value);
+  if (normalized.length > 1 && !values.has(normalized)) values.set(normalized, value);
+}
+
 function addIdentifier(values: Map<string, string>, value: string, includeLeaf = false): void {
   const clean = value.trim().replace(/[.,;:]+$/g, "");
-  const normalized = normalizeIdentifier(clean);
-  if (normalized.length > 1 && !values.has(normalized)) values.set(normalized, clean);
-  if (!includeLeaf) return;
-  const leaf = clean.split(".").at(-1);
-  if (!leaf || leaf === clean || leaf.length < 3) return;
-  const leafNormalized = normalizeIdentifier(leaf);
-  if (leafNormalized.length > 1 && !values.has(leafNormalized)) values.set(leafNormalized, leaf);
+  addRaw(values, clean);
+  if (!includeLeaf || !clean.includes(".")) return;
+
+  const segments = clean.split(".");
+  if (segments.length > 2) {
+    for (let length = 2; length < segments.length; length += 1) {
+      const prefix = segments.slice(0, length).join(".");
+      if (prefix.length > 2) addRaw(values, prefix);
+    }
+  }
+
+  const leaf = segments.at(-1);
+  if (leaf && leaf !== clean && leaf.length >= 3) addRaw(values, leaf);
 }
 
 export function extractIdentifiers(text: string): string[] {
@@ -87,7 +98,6 @@ export function extractCodeIdentifiers(text: string): string[] {
 
 export function extractJsonIdentifiers(value: unknown): string[] {
   const found = new Map<string, string>();
-
   const add = (identifier: string, includeLeaf = false): void => addIdentifier(found, identifier, includeLeaf);
 
   const visit = (node: unknown, path: readonly string[]): void => {
@@ -95,26 +105,19 @@ export function extractJsonIdentifiers(value: unknown): string[] {
       for (const identifier of extractIdentifiers(node)) add(identifier, identifier.includes("."));
       return;
     }
-
     if (Array.isArray(node)) {
       for (const child of node) visit(child, path);
       return;
     }
-
     if (node !== null && typeof node === "object") {
       for (const [key, child] of Object.entries(node)) {
         const nextPath = [...path, key];
         if (/^[A-Za-z_][A-Za-z0-9_.-]*:[A-Za-z_][A-Za-z0-9_./-]*$/.test(key) || key.startsWith("@minecraft/")) add(key);
-
         if (key === "format_version" && (typeof child === "string" || typeof child === "number")) {
           add("format_version");
           add(`format_version:${String(child)}`);
         }
-
-        if (MANIFEST_FIELDS.has(key) && (path.length === 0 || path[0] === "header" || path[0] === "modules" || path[0] === "dependencies")) {
-          add(`manifest.${key}`);
-        }
-
+        if (MANIFEST_FIELDS.has(key) && (path.length === 0 || path[0] === "header" || path[0] === "modules" || path[0] === "dependencies")) add(`manifest.${key}`);
         if (path.includes("states")) {
           const statesIndex = path.lastIndexOf("states");
           if (statesIndex === path.length - 1) {
@@ -122,14 +125,11 @@ export function extractJsonIdentifiers(value: unknown): string[] {
             add(`animation_controller.state.${key}`);
           }
         }
-
         if (RENDER_CONTROLLER_FIELDS.has(key) && path.includes("render_controllers")) add(`render_controller.${key}`);
-
         if (path.at(-1) === "properties") {
           add(key);
           add(`schema.${key}`);
         }
-
         visit(child, nextPath);
       }
     }
