@@ -59,6 +59,33 @@ describe("source configuration", () => {
     expect(examples?.include).toContain("resources/**/*.json");
   });
 
+  it("includes the expanded GitHub knowledge sources with safe scopes", () => {
+    const expected = [
+      ["bridge_core_docs", "https://github.com/bridge-core/docs.git", "main", "stable", ["docs"]],
+      ["bridge_core_editor_packages", "https://github.com/bridge-core/editor-packages.git", "main", "stable", ["packages"]],
+      ["blockception_language_server", "https://github.com/Blockception/minecraft-bedrock-language-server.git", "main", "stable", ["documentation", "ide", "packages", "tools"]],
+      ["blockception_json_schemas", "https://github.com/Blockception/Minecraft-bedrock-json-schemas.git", "main", "stable", ["behavior", "docs", "general", "language", "resource", "skinpacks", "source", "worldgen"]],
+      ["jayly_scriptapi", "https://github.com/JaylyDev/ScriptAPI.git", "stable", "stable", ["packages", "scripts", "tools"]],
+      ["blockbench", "https://github.com/JannisX11/blockbench.git", "master", "stable", ["content", "js", "types"]],
+      ["jannis_bedrock_schemas", "https://github.com/JannisX11/bedrock-json-schemas.git", "master", "unknown", undefined],
+      ["nusiq_mcblend", "https://github.com/Nusiq/mcblend.git", "master", "stable", ["docs"]],
+      ["bedrock_core_server", "https://github.com/bedrock-core/server.git", "main", "stable", ["packages", "types"]],
+      ["minecraft_addon_toolchain", "https://github.com/minecraft-addon-tools/minecraft-addon-toolchain.git", "master", "unknown", ["packages"]],
+    ] as const;
+
+    const byId = new Map(loadSources().map((source) => [source.id, source]));
+    for (const [id, repository, branch, channel, sparsePaths] of expected) {
+      const source = byId.get(id);
+      expect(source, id).toBeDefined();
+      expect(source?.repository, id).toBe(repository);
+      expect(source?.branch, id).toBe(branch);
+      expect(source?.channel, id).toBe(channel);
+      expect(source?.tier, id).toBe(3);
+      expect(source?.defaultEnabled ?? true, id).toBe(true);
+      if (sparsePaths) expect(source?.sparsePaths, id).toEqual(sparsePaths);
+    }
+  });
+
   it("keeps beta schemas, protocol data, scripting samples, GameTests, and Editor material preview-only", () => {
     const previewIds = [
       "bedrock_schemas_preview",

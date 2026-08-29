@@ -118,6 +118,16 @@ Stable/default-enabled Git sources:
 6. `Mojang/minecraft-creator-tools` — Tier 3 targeted Creator Tools documentation.
 7. `Bedrock-OSS/bedrock-wiki` `wiki` — Tier 3 community documentation. Sparse checkout selects its `docs/` knowledge subtree, and only Markdown knowledge is indexed.
 8. `Bedrock-OSS/bedrock-examples` — Tier 3 maintained behavior/resource-pack example companion to Bedrock Wiki. Sparse checkout selects `resources/`, and include rules retain only JSON, JavaScript, TypeScript, mcfunction, and Markdown evidence rather than binary assets.
+9. `bridge-core/docs` — Tier 3 bridge. editor guides and reference documentation.
+10. `bridge-core/editor-packages` — Tier 3 bridge. schemas and Bedrock file definitions.
+11. `Blockception/minecraft-bedrock-language-server` — Tier 3 language-server diagnostics, project helpers, and IDE tooling.
+12. `Blockception/Minecraft-bedrock-json-schemas` — Tier 3 community behavior/resource-pack schemas.
+13. `JaylyDev/ScriptAPI` `stable` — Tier 3 community Script API samples and packages.
+14. `JannisX11/blockbench` — Tier 3 Blockbench Bedrock format implementation and type definitions.
+15. `Nusiq/mcblend` — Tier 3 Bedrock modeling and animation documentation.
+16. `bedrock-core/server` — Tier 3 addon interoperability framework documentation and packages.
+17. `JannisX11/bedrock-json-schemas` — Tier 3 historical compatibility schemas.
+18. `minecraft-addon-tools/minecraft-addon-toolchain` — Tier 3 historical addon build tooling.
 
 Stable npm metadata is enabled by default for verified modules including `@minecraft/server`, `@minecraft/server-ui`, and `@minecraft/common`. It preserves exact npm versions/dist-tags and generates stable manifest dependency evidence where appropriate.
 
@@ -190,6 +200,17 @@ Include all configured preview Git/npm sources explicitly:
 npm run dev -- sync-sources --include-preview
 npm run dev -- rebuild-sources --include-preview
 ```
+
+For the maximum local corpus, synchronize and index every configured stable and preview source:
+
+```bash
+npm run dev -- sync-sources --include-preview
+npm run dev -- rebuild-sources --include-preview
+npm run dev -- validate-index
+npm run dev -- status --json
+```
+
+Preview material remains excluded from normal retrieval unless the query or request explicitly asks for preview material.
 
 The environment equivalent is:
 
