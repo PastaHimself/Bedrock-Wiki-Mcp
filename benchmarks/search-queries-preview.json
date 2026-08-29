@@ -1,0 +1,93 @@
+{
+  "name": "Bedrock preview and beta retrieval quality",
+  "targets": {
+    "exactTop1": 0.90,
+    "naturalTop3": 0.85,
+    "usefulTop5": 0.95
+  },
+  "queries": [
+    {
+      "id": "beta-server-version",
+      "kind": "natural",
+      "query": "current beta @minecraft/server version",
+      "includePreview": true,
+      "requiredTopK": 2,
+      "relevant": [{ "source": "minecraft_npm_preview", "channel": "preview", "module": "@minecraft/server", "grade": 3 }]
+    },
+    {
+      "id": "beta-server-ui-version",
+      "kind": "natural",
+      "query": "latest beta @minecraft/server-ui version",
+      "includePreview": true,
+      "requiredTopK": 3,
+      "relevant": [{ "source": "minecraft_npm_preview", "channel": "preview", "module": "@minecraft/server-ui", "grade": 3 }]
+    },
+    {
+      "id": "beta-server-editor-version",
+      "kind": "natural",
+      "query": "current beta @minecraft/server-editor package version",
+      "includePreview": true,
+      "requiredTopK": 3,
+      "relevant": [{ "source": "minecraft_npm_preview", "module": "@minecraft/server-editor", "grade": 3 }]
+    },
+    {
+      "id": "beta-server-gametest-version",
+      "kind": "natural",
+      "query": "current beta @minecraft/server-gametest version",
+      "includePreview": true,
+      "requiredTopK": 3,
+      "relevant": [{ "source": "minecraft_npm_preview", "module": "@minecraft/server-gametest", "grade": 3 }]
+    },
+    {
+      "id": "beta-player-input-permissions",
+      "kind": "exact",
+      "query": "PlayerInputPermissions",
+      "includePreview": true,
+      "requiredTopK": 3,
+      "relevant": [{ "identifier": "PlayerInputPermissions", "grade": 3 }]
+    },
+    {
+      "id": "preview-gametest",
+      "kind": "natural",
+      "query": "GameTest register a test and use SimulatedPlayer",
+      "includePreview": true,
+      "requiredTopK": 5,
+      "relevant": [{ "source": "minecraft_gametests_preview", "category": "gametest", "grade": 3 }]
+    },
+    {
+      "id": "preview-editor-extension",
+      "kind": "natural",
+      "query": "Minecraft Editor extension example custom tool",
+      "includePreview": true,
+      "relevant": [{ "source": "minecraft_editor_extension_samples_preview", "category": "editor", "grade": 3 }]
+    },
+    {
+      "id": "preview-schema-debugging",
+      "kind": "natural",
+      "query": "why does this Bedrock entity JSON fail schema validation",
+      "includePreview": true,
+      "relevant": [{ "source": "bedrock_schemas_preview", "category": "schemas", "grade": 3 }]
+    },
+    {
+      "id": "preview-network-protocol",
+      "kind": "natural",
+      "query": "Bedrock network protocol packet documentation",
+      "includePreview": true,
+      "relevant": [{ "source": "bedrock_protocol_docs_preview", "category": "networking_protocol", "grade": 3 }]
+    },
+    {
+      "id": "preview-scripting-example",
+      "kind": "natural",
+      "query": "beta Script API example behavior pack",
+      "includePreview": true,
+      "relevant": [{ "source": "minecraft_scripting_samples_preview", "grade": 3 }]
+    },
+    {
+      "id": "preview-bedrock-samples",
+      "kind": "natural",
+      "query": "preview custom block component sample",
+      "includePreview": true,
+      "relevant": [{ "source": "bedrock_samples_preview", "grade": 3 }]
+    }
+  ]
+}
