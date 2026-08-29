@@ -1,5 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 import type { SemanticRetriever } from "../semantic/retriever.js";
+import { isNearDuplicateEvidence } from "./dedup.js";
 import {
   knowledgeCandidateAllowed,
   searchKnowledge,
@@ -128,6 +129,22 @@ function semanticIntentBonus(row: SemanticCandidateRow, intent: BedrockQueryInte
   return bonus;
 }
 
+function duplicateResult(candidate: KnowledgeSearchResult, accepted: readonly KnowledgeSearchResult[]): boolean {
+  return accepted.some((existing) => isNearDuplicateEvidence({
+    text: candidate.excerpt,
+    ...(candidate.identifier ? { identifier: candidate.identifier } : {}),
+    ...(candidate.apiVersion ? { apiVersion: candidate.apiVersion } : {}),
+    ...(candidate.minecraftVersion ? { minecraftVersion: candidate.minecraftVersion } : {}),
+    channel: candidate.channel,
+  }, {
+    text: existing.excerpt,
+    ...(existing.identifier ? { identifier: existing.identifier } : {}),
+    ...(existing.apiVersion ? { apiVersion: existing.apiVersion } : {}),
+    ...(existing.minecraftVersion ? { minecraftVersion: existing.minecraftVersion } : {}),
+    channel: existing.channel,
+  }));
+}
+
 export async function hybridSearchKnowledge(
   database: DatabaseSync,
   semantic: SemanticRetriever,
@@ -185,6 +202,10 @@ export async function hybridSearchKnowledge(
     }
     const used = perDocument.get(entry.result.documentId) ?? 0;
     if (used >= 2 && !entry.result.exactMatch) continue;
+    if (duplicateResult(entry.result, results)) {
+      truncated = true;
+      continue;
+    }
     const remaining = maxChars - totalChars;
     if (remaining < 200) {
       truncated = true;
