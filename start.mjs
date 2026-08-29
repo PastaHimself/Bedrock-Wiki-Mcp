@@ -11,6 +11,10 @@ process.env.BEDROCK_MCP_DATA_DIR ??= "/home/container/data";
 process.env.BEDROCK_MCP_SEMANTIC_ENABLED ??= "false";
 process.env.BEDROCK_MCP_MAX_CONCURRENT_REQUESTS ??= "8";
 process.env.BEDROCK_MCP_LOCAL_LLM_ENABLED ??= "true";
+// Game-host containers commonly have a low PID/thread cgroup limit even when
+// the node reports many CPU cores. Keep the Pterodactyl default conservative;
+// operators can still override it in the panel environment.
+process.env.BEDROCK_MCP_LOCAL_LLM_THREADS ??= "1";
 process.env.BEDROCK_MCP_LOCAL_LLM_STARTUP_TIMEOUT_MS ??= "900000";
 
 const LLAMA_INSTALL_URL = "https://llama.app/install.sh";
