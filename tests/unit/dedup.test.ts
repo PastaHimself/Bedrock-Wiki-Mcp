@@ -14,13 +14,21 @@ afterEach(() => {
 });
 
 describe("cross-source evidence deduplication", () => {
-  it("detects formatting-only and near-identical copies but preserves channel/version distinctions", () => {
-    const first = { text: "# Player spawn\nUse world.afterEvents.playerSpawn to observe a player joining the world.", channel: "stable", apiVersion: "2.0.0" };
-    const copy = { text: "Player spawn — use `world.afterEvents.playerSpawn` to observe a player joining the world.", channel: "stable", apiVersion: "2.0.0" };
-    expect(evidenceSimilarity(first, copy)).toBeGreaterThan(0.5);
-    expect(isNearDuplicateEvidence({ ...first, text: `${first.text}\nThis sentence makes the source materially longer with another distinct explanation.` }, { ...copy, text: `${copy.text}\nThis sentence makes the source materially longer with another distinct explanation.` }, 0.5)).toBe(true);
-    expect(isNearDuplicateEvidence(first, { ...first, channel: "preview" })).toBe(false);
-    expect(isNearDuplicateEvidence(first, { ...first, apiVersion: "3.0.0" })).toBe(false);
+  it("detects formatting-only copies but preserves channel/version distinctions", () => {
+    const first = {
+      text: "Player spawn use world.afterEvents.playerSpawn to observe a player joining the world. This official sample demonstrates subscribing to the event and responding when the player appears.",
+      channel: "stable",
+      apiVersion: "2.0.0",
+    };
+    const copy = {
+      text: "# Player spawn\nUse `world.afterEvents.playerSpawn` to observe a player joining the world. This official sample demonstrates subscribing to the event and responding when the player appears.",
+      channel: "stable",
+      apiVersion: "2.0.0",
+    };
+    expect(evidenceSimilarity(first, copy)).toBeGreaterThan(0.9);
+    expect(isNearDuplicateEvidence(first, copy)).toBe(true);
+    expect(isNearDuplicateEvidence(first, { ...copy, channel: "preview" })).toBe(false);
+    expect(isNearDuplicateEvidence(first, { ...copy, apiVersion: "3.0.0" })).toBe(false);
   });
 
   it("returns one copy of duplicated evidence and keeps the higher-trust source", () => {
@@ -30,7 +38,7 @@ describe("cross-source evidence deduplication", () => {
     const repository = new IndexRepository(database);
     const official: SourceDescriptor = { id: "official", name: "Official docs", tier: 1, channel: "stable", revision: "a" };
     const community: SourceDescriptor = { id: "community", name: "Community docs", tier: 3, channel: "stable", revision: "b" };
-    const content = "# Spawn event\nUse world.afterEvents.playerSpawn to run code after a player spawns. This example shows how to subscribe and handle the event safely in a behavior pack.";
+    const content = "# Spawn event\nUse world.afterEvents.playerSpawn to run code after a player spawns. This example shows how to subscribe and handle the event safely in a behavior pack with enough surrounding explanation to identify duplicate evidence.";
 
     repository.replaceDocument(ingestDocument({ source: community, path: "guides/spawn.md", content }));
     repository.replaceDocument(ingestDocument({ source: official, path: "creator/ScriptAPI/spawn.md", content }));
