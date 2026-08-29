@@ -4,6 +4,10 @@ A self-hosted, read-only Model Context Protocol knowledge server for Minecraft B
 
 FRE USE: https://bedrockmcpwiki.servegame.net/mcp
 
+
+- this mcp server is still in beta
+
+
 ## Status
 
 The MCP is built as a Bedrock development knowledge service rather than a generic document search server. It combines official Creator documentation, official samples/tools/schemas, official `@minecraft/*` npm package metadata, selected community material, exact identifier indexing, version/channel-aware retrieval, conservative deduplication, and optional local semantic search.
