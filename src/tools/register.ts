@@ -1,6 +1,8 @@
 import type { DatabaseSync } from "node:sqlite";
 import type { McpServer } from "@modelcontextprotocol/server";
 import * as z from "zod/v4";
+import { answerBedrock } from "../ai/answer.js";
+import type { LocalLlm } from "../ai/local-llm.js";
 import type { SemanticRetriever } from "../semantic/retriever.js";
 import { getDefinition } from "../search/definition.js";
 import { listKnowledgeCategories, listKnowledgeSources } from "../search/discovery.js";
@@ -117,6 +119,8 @@ export function registerKnowledgeTools(
   database?: DatabaseSync,
   semantic?: SemanticRetriever,
   semanticTopK = 40,
+  localLlm?: LocalLlm,
+  localLlmRetrievalLimit = 6,
 ): void {
   server.registerTool(
     "search",
@@ -326,6 +330,83 @@ export function registerKnowledgeTools(
     async () => {
       try {
         return textResult({ categories: listKnowledgeCategories(requireDatabase(database)) });
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    "ask_bedrock",
+    {
+      title: "Ask the local Bedrock helper",
+      description: "Answer a Minecraft Bedrock development question with an optional local Qwen model grounded in indexed documentation. Returns the exact resources and citations used; it never calls a hosted AI service.",
+      annotations: READ_ONLY,
+      inputSchema: z.object({
+        query: z.string().trim().min(1).max(500).describe("Bedrock development question to answer from indexed evidence"),
+        limit: z.number().int().min(1).max(8).optional().describe("Maximum indexed resources to give the local model"),
+        kinds: z.array(kindSchema).max(10).optional(),
+        categories: z.array(z.string().min(1).max(100)).max(10).optional(),
+        stabilities: z.array(stabilitySchema).max(5).optional(),
+        sourceTiers: z.array(z.number().int().min(1).max(4)).max(4).optional(),
+        source: z.string().trim().min(1).max(100).optional().describe("Exact indexed source id from list_sources"),
+        channel: channelSchema.optional(),
+        module: z.string().trim().min(1).max(100).optional().describe("Exact Script API package/module name, for example @minecraft/server"),
+        pathPrefix: z.string().trim().min(1).max(500).optional(),
+        minecraftVersion: z.string().min(1).max(50).optional(),
+        apiVersion: z.string().min(1).max(50).optional(),
+        includePreview: z.boolean().optional(),
+        includeHistorical: z.boolean().optional(),
+      }),
+      outputSchema: z.object({
+        query: z.string(),
+        answer: z.string(),
+        model: z.string(),
+        resources: z.array(searchResultSchema).max(8),
+        citations: z.array(z.object({
+          id: z.string(),
+          chunkId: z.string(),
+          documentId: z.string(),
+          title: z.string(),
+          path: z.string(),
+          sourceId: z.string(),
+          sourceName: z.string(),
+          channel: z.string(),
+          sourceTier: z.number().int(),
+          canonicalUrl: z.string().optional(),
+        })).max(8),
+        candidateCount: z.number().int(),
+      }),
+    },
+    async (args) => {
+      try {
+        if (!localLlm) {
+          throw new Error("LOCAL_LLM_DISABLED: set BEDROCK_MCP_LOCAL_LLM_ENABLED=true and start llama-server on the configured loopback endpoint");
+        }
+        const options: KnowledgeSearchOptions = {
+          query: args.query,
+          ...(args.limit !== undefined ? { limit: args.limit } : {}),
+          ...(args.kinds !== undefined ? { kinds: args.kinds } : {}),
+          ...(args.categories !== undefined ? { categories: args.categories } : {}),
+          ...(args.stabilities !== undefined ? { stabilities: args.stabilities } : {}),
+          ...(args.sourceTiers !== undefined ? { sourceTiers: args.sourceTiers } : {}),
+          ...(args.source !== undefined ? { sourceId: args.source } : {}),
+          ...(args.channel !== undefined ? { channel: args.channel } : {}),
+          ...(args.module !== undefined ? { apiPackage: args.module } : {}),
+          ...(args.pathPrefix !== undefined ? { pathPrefix: args.pathPrefix } : {}),
+          ...(args.minecraftVersion !== undefined ? { minecraftVersion: args.minecraftVersion } : {}),
+          ...(args.apiVersion !== undefined ? { apiVersion: args.apiVersion } : {}),
+          ...(args.includePreview !== undefined ? { includePreview: args.includePreview } : {}),
+          ...(args.includeHistorical !== undefined ? { includeHistorical: args.includeHistorical } : {}),
+        };
+        const db = requireDatabase(database);
+        return textResult(await answerBedrock({
+          llm: localLlm,
+          retrievalLimit: localLlmRetrievalLimit,
+          search: (searchOptions) => semantic
+            ? hybridSearchKnowledge(db, semantic, searchOptions, semanticTopK)
+            : searchKnowledge(db, searchOptions),
+        }, options));
       } catch (error) {
         return toolError(error);
       }
