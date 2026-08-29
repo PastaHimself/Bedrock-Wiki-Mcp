@@ -8,7 +8,7 @@ export interface Classification {
 }
 
 function documentationCategory(lower: string): string {
-  if (/\bmolang\b/.test(lower)) return "molang";
+  if (lower.includes("molang")) return "molang";
   if (/(?:^|\/)commands?(?:\/|$)/.test(lower)) return "commands";
   if (/gametest/.test(lower)) return "gametest";
   if (/editor/.test(lower)) return "editor";
