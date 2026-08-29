@@ -5,14 +5,14 @@ import { registerKnowledgeTools } from "../../src/tools/register.js";
 interface RegisteredTool {
   name: string;
   config: unknown;
-  handler?: (args: unknown) => Promise<unknown>;
+  handler?: (args: any) => Promise<any>;
 }
 
 describe("MCP tool registry", () => {
   it("registers exactly the six intended read-only knowledge tools", async () => {
     const tools: RegisteredTool[] = [];
     const fakeServer = {
-      registerTool(name: string, config: unknown, handler?: (args: unknown) => Promise<unknown>): void {
+      registerTool(name: string, config: unknown, handler?: (args: any) => Promise<any>): void {
         tools.push({ name, config, ...(handler ? { handler } : {}) });
       },
     } as unknown as McpServer;
@@ -25,7 +25,7 @@ describe("MCP tool registry", () => {
       "get_definition",
       "list_sources",
       "list_categories",
-      "ask_bedrock",
+      "plan_lookup",
     ]);
 
     for (const tool of tools) {
@@ -54,26 +54,22 @@ describe("MCP tool registry", () => {
       pathPrefix: "creator/ScriptAPI/",
     });
 
-    const askConfig = tools.find((tool) => tool.name === "ask_bedrock")?.config as {
+    const planConfig = tools.find((tool) => tool.name === "plan_lookup")?.config as {
       inputSchema: { parse(value: unknown): unknown };
     };
-    expect(askConfig.inputSchema.parse({
-      query: "How do I listen for player input?",
-      channel: "stable",
-      module: "@minecraft/server",
-      limit: 4,
+    expect(planConfig.inputSchema.parse({
+      query: "What is world.afterEvents.playerSpawn?",
     })).toMatchObject({
-      query: "How do I listen for player input?",
-      channel: "stable",
-      module: "@minecraft/server",
-      limit: 4,
+      query: "What is world.afterEvents.playerSpawn?",
     });
 
-    const disabled = await tools.find((tool) => tool.name === "ask_bedrock")?.handler?.({
-      query: "How do I listen for player input?",
+    const planned = await tools.find((tool) => tool.name === "plan_lookup")?.handler?.({
+      query: "What is world.afterEvents.playerSpawn?",
     });
-    expect(disabled).toMatchObject({ isError: true });
-    expect((disabled as { content: Array<{ text: string }> }).content[0]?.text)
-      .toContain("LOCAL_LLM_DISABLED");
+    expect(planned?.structuredContent).toMatchObject({
+      intent: "definition",
+      recommendedTool: "get_definition",
+      searchQuery: "world.afterEvents.playerSpawn",
+    });
   });
 });
