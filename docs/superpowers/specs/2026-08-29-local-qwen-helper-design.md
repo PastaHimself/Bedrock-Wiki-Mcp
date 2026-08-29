@@ -87,7 +87,7 @@ The following environment variables are added:
 | `BEDROCK_MCP_LOCAL_LLM_MAX_TOKENS` | `512` | Maximum generated tokens. |
 | `BEDROCK_MCP_LOCAL_LLM_RETRIEVAL_LIMIT` | `6` | Maximum evidence resources supplied to Qwen. |
 
-The application starts the local model server when no healthy loopback server is already available. Operators must install the `llama-server` executable; the application does not download or compile the inference runtime itself. The model cache is stored beneath the configured data directory, and the child process is stopped with the MCP process. `LocalLlmClient` permits one active generation; additional concurrent helper calls receive a retryable busy error.
+The application starts the local model server when no healthy loopback server is already available. Operators must install the `llama-server` executable; the application does not download or compile the inference runtime itself. If startup reports an unavailable runtime or timeout, the MCP continues with deterministic tools and the helper reports the local-runtime error when called. The model cache is stored beneath the configured data directory, and the child process is stopped with the MCP process. `LocalLlmClient` permits one active generation; additional concurrent helper calls receive a retryable busy error.
 
 ## Verification
 

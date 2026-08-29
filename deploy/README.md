@@ -94,7 +94,7 @@ BEDROCK_MCP_LOCAL_LLM_MAX_TOKENS=512
 BEDROCK_MCP_LOCAL_LLM_RETRIEVAL_LIMIT=6
 ~~~
 
-The Node service creates `/var/lib/bedrock-mcp/models/huggingface`, starts llama-server, waits for `/health`, and stops the child process on shutdown. The repository also includes an optional separate systemd unit for operators who want Qwen supervised independently; use that unit instead of Node auto-start when installing it. It assumes the llama-server binary is `/usr/local/bin/llama-server`; edit `deploy/systemd/bedrock-qwen.service` if your build is elsewhere:
+The Node service creates `/var/lib/bedrock-mcp/models/huggingface`, starts llama-server, waits for `/health`, and stops the child process on shutdown. If the runtime is missing or the first model load fails, the Node service remains online and reports the local-runtime error only when `ask_bedrock` is called. The repository also includes an optional separate systemd unit for operators who want Qwen supervised independently; use that unit instead of Node auto-start when installing it. It assumes the llama-server binary is `/usr/local/bin/llama-server`; edit `deploy/systemd/bedrock-qwen.service` if your build is elsewhere:
 
 ~~~bash
 sudo install -d -o bedrock-mcp -g bedrock-mcp -m 0750 /var/lib/bedrock-mcp/models/huggingface

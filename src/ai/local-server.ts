@@ -183,3 +183,19 @@ export async function startLocalLlmServer(options: LocalLlmServerOptions): Promi
     },
   };
 }
+
+export async function tryStartLocalLlmServer(
+  options: LocalLlmServerOptions,
+  onUnavailable?: (error: LocalLlmError) => void,
+): Promise<LocalLlmServerHandle | undefined> {
+  try {
+    return await startLocalLlmServer(options);
+  } catch (error) {
+    if (error instanceof LocalLlmError
+      && (error.code === "LOCAL_LLM_UNAVAILABLE" || error.code === "LOCAL_LLM_TIMEOUT")) {
+      onUnavailable?.(error);
+      return undefined;
+    }
+    throw error;
+  }
+}
