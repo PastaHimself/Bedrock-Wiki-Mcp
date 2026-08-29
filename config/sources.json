@@ -112,6 +112,25 @@
       ]
     },
     {
+      "id": "bedrock_oss_examples",
+      "name": "Bedrock OSS Examples (Community)",
+      "type": "git",
+      "tier": 3,
+      "repository": "https://github.com/Bedrock-OSS/bedrock-examples.git",
+      "branch": "main",
+      "channel": "stable",
+      "sparsePaths": [
+        "resources"
+      ],
+      "include": [
+        "resources/**/*.json",
+        "resources/**/*.js",
+        "resources/**/*.ts",
+        "resources/**/*.mcfunction",
+        "resources/**/*.md"
+      ]
+    },
+    {
       "id": "bedrock_schemas_preview",
       "name": "Mojang Bedrock Schemas (Preview)",
       "type": "git",
