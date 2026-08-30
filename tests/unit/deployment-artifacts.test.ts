@@ -63,8 +63,9 @@ describe("production deployment artifacts", () => {
     expect(environment).toContain("BEDROCK_MCP_SEMANTIC_MODEL=onnx-community/all-MiniLM-L6-v2-ONNX");
     expect(environment).not.toContain("BEDROCK_MCP_LOCAL_LLM_");
     expect(environment).not.toContain("Qwen");
-    expect(environment).toContain("BEDROCK_MCP_BACKUP_RETAIN=3");
-    expect(environment).toContain("BEDROCK_MCP_MIN_FREE_BYTES=2147483648");
+    expect(environment).toContain("BEDROCK_MCP_INCLUDE_PREVIEW=true");
+    expect(environment).toContain("BEDROCK_MCP_BACKUP_RETAIN=1");
+    expect(environment).toContain("BEDROCK_MCP_MIN_FREE_BYTES=805306368");
   });
 
   it("uses blobless partial clones and limits only explicitly configured large sources", async () => {
@@ -79,6 +80,8 @@ describe("production deployment artifacts", () => {
     expect(sourceRegistry).toContain('"id": "bedrock_oss_wiki"');
     expect(sourceRegistry).toContain('"sparsePaths": [\n        "docs"');
     expect(sourceRegistry).toContain('"id": "bedrock_samples_stable"');
+    expect(sourceRegistry).toContain('"id": "jayly_scriptapi_docs"');
+    expect(sourceRegistry).toContain('"id": "worldedit_be"');
   });
 
   it("documents Cloudflare Tunnel client-IP trust without enabling generic proxy trust", async () => {

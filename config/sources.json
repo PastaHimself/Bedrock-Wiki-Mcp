@@ -378,6 +378,214 @@
       ]
     },
     {
+      "id": "jayly_scriptapi_docs",
+      "name": "Jayly Script API Documentation and Examples",
+      "type": "git",
+      "tier": 3,
+      "repository": "https://github.com/JaylyDev/scriptapi-docs.git",
+      "branch": "master",
+      "channel": "unknown",
+      "defaultEnabled": true,
+      "sparsePaths": [
+        "docs",
+        "examples"
+      ],
+      "include": [
+        "README.md",
+        "docs/**/*.md",
+        "docs/**/*.mdx",
+        "docs/**/*.json",
+        "examples/**/*.md",
+        "examples/**/*.js",
+        "examples/**/*.ts",
+        "examples/**/*.json"
+      ]
+    },
+    {
+      "id": "bedrock_oss_regolith",
+      "name": "Bedrock OSS Regolith Documentation and Templates",
+      "type": "git",
+      "tier": 3,
+      "repository": "https://github.com/Bedrock-OSS/regolith.git",
+      "branch": "main",
+      "channel": "stable",
+      "defaultEnabled": true,
+      "sparsePaths": [
+        "docs",
+        "templates"
+      ],
+      "include": [
+        "README.md",
+        "docs/**/*.md",
+        "docs/**/*.mdx",
+        "templates/**/*.json",
+        "templates/**/*.js",
+        "templates/**/*.ts",
+        "templates/**/*.mcfunction",
+        "templates/**/*.md"
+      ]
+    },
+    {
+      "id": "worldedit_be",
+      "name": "WorldEdit for Bedrock Add-on Reference",
+      "type": "git",
+      "tier": 3,
+      "repository": "https://github.com/SIsilicon/WorldEdit-BE.git",
+      "branch": "master",
+      "channel": "unknown",
+      "defaultEnabled": true,
+      "sparsePaths": [
+        "BP"
+      ],
+      "include": [
+        "README.md",
+        "BETA.md",
+        "BP/**/*.json",
+        "BP/**/*.js",
+        "BP/**/*.ts",
+        "BP/**/*.mcfunction",
+        "BP/**/*.lang",
+        "BP/**/*.md"
+      ]
+    },
+    {
+      "id": "jannis_snowstorm",
+      "name": "Snowstorm Bedrock Particle Editor",
+      "type": "git",
+      "tier": 3,
+      "repository": "https://github.com/JannisX11/snowstorm.git",
+      "branch": "master",
+      "channel": "stable",
+      "defaultEnabled": true,
+      "include": [
+        "README.md",
+        "**/*.md",
+        "**/*.js",
+        "**/*.json",
+        "**/*.ts"
+      ],
+      "exclude": [
+        "**/node_modules/**",
+        "**/dist/**",
+        "**/build/**",
+        "**/assets/**",
+        "**/public/**"
+      ]
+    },
+    {
+      "id": "bridge_core_legacy_editor",
+      "name": "bridge. Legacy Editor Implementation",
+      "type": "git",
+      "tier": 4,
+      "repository": "https://github.com/bridge-core/bridge..git",
+      "branch": "master",
+      "channel": "unknown",
+      "defaultEnabled": true,
+      "sparsePaths": [
+        "app"
+      ],
+      "include": [
+        "README.md",
+        "app/**/*.md",
+        "app/**/*.js",
+        "app/**/*.json",
+        "app/**/*.ts"
+      ],
+      "exclude": [
+        "**/node_modules/**",
+        "**/dist/**",
+        "**/build/**",
+        "**/assets/**"
+      ]
+    },
+    {
+      "id": "minecraft_scripting_types_historical",
+      "name": "Minecraft Scripting Types (Historical)",
+      "type": "git",
+      "tier": 4,
+      "repository": "https://github.com/minecraft-addon-tools/minecraft-scripting-types.git",
+      "branch": "master",
+      "channel": "unknown",
+      "defaultEnabled": true,
+      "include": [
+        "README.md",
+        "**/*.d.ts",
+        "**/*.ts",
+        "**/*.js",
+        "**/*.json",
+        "**/*.md"
+      ]
+    },
+    {
+      "id": "bedrock_studio_schemas_historical",
+      "name": "Bedrock Studio JSON Schemas (Historical)",
+      "type": "git",
+      "tier": 4,
+      "repository": "https://github.com/bedrock-studio/bedrock-json-schemas.git",
+      "branch": "master",
+      "channel": "unknown",
+      "defaultEnabled": true,
+      "include": [
+        "README.md",
+        "**/*.json",
+        "**/*.md"
+      ]
+    },
+    {
+      "id": "blockception_molang_historical",
+      "name": "Blockception Molang Tooling (Historical)",
+      "type": "git",
+      "tier": 4,
+      "repository": "https://github.com/Blockception/BC-Minecraft-Molang.git",
+      "branch": "main",
+      "channel": "unknown",
+      "defaultEnabled": true,
+      "include": [
+        "README.md",
+        "**/*.md",
+        "**/*.json",
+        "**/*.js",
+        "**/*.ts"
+      ],
+      "exclude": [
+        "**/node_modules/**",
+        "**/dist/**",
+        "**/coverage/**"
+      ]
+    },
+    {
+      "id": "magic_method_docs",
+      "name": "Bedrock Magic Method Documentation",
+      "type": "git",
+      "tier": 4,
+      "repository": "https://github.com/notchyves/MagicMethodDocs.git",
+      "branch": "main",
+      "channel": "unknown",
+      "defaultEnabled": true,
+      "include": [
+        "README.md",
+        "**/*.md",
+        "**/*.txt",
+        "**/*.json"
+      ]
+    },
+    {
+      "id": "render_method_docs",
+      "name": "Bedrock Render Method Documentation",
+      "type": "git",
+      "tier": 4,
+      "repository": "https://github.com/notchyves/RenderMethodDocs.git",
+      "branch": "main",
+      "channel": "unknown",
+      "defaultEnabled": true,
+      "include": [
+        "README.md",
+        "**/*.md",
+        "**/*.txt",
+        "**/*.json"
+      ]
+    },
+    {
       "id": "bedrock_schemas_preview",
       "name": "Mojang Bedrock Schemas (Preview)",
       "type": "git",
@@ -387,12 +595,21 @@
       "channel": "preview",
       "defaultEnabled": false,
       "sparsePaths": [
-        "schemas"
+        "schemas",
+        "types",
+        "forms"
       ],
       "include": [
         "README.md",
+        "catalog.json",
         "schemas/*.json",
-        "schemas/**/*.json"
+        "schemas/**/*.json",
+        "types/*.ts",
+        "types/**/*.ts",
+        "types/*.d.ts",
+        "types/**/*.d.ts",
+        "forms/*.json",
+        "forms/**/*.json"
       ]
     },
     {
