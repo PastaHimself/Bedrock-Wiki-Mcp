@@ -1,7 +1,7 @@
 {
   "name": "bedrock-wiki-mcp",
   "version": "0.1.0",
-  "description": "Self-hosted read-only Minecraft Bedrock Edition knowledge MCP server",
+  "description": "Read-only MCP server for searching Minecraft Bedrock add-on documentation, samples, schemas, and Script API metadata.",
   "type": "module",
   "private": true,
   "engines": {
