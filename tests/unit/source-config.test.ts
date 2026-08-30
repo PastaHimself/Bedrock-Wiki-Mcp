@@ -86,6 +86,43 @@ describe("source configuration", () => {
     }
   });
 
+  it("includes the high-capacity creator corpus with bounded text/code scopes", () => {
+    const expected = [
+      ["jayly_scriptapi_docs", "https://github.com/JaylyDev/scriptapi-docs.git", 3, ["docs", "examples"]],
+      ["bedrock_oss_regolith", "https://github.com/Bedrock-OSS/regolith.git", 3, ["docs", "templates"]],
+      ["worldedit_be", "https://github.com/SIsilicon/WorldEdit-BE.git", 3, ["BP"]],
+      ["jannis_snowstorm", "https://github.com/JannisX11/snowstorm.git", 3, undefined],
+      ["bridge_core_legacy_editor", "https://github.com/bridge-core/bridge..git", 4, ["app"]],
+      ["minecraft_scripting_types_historical", "https://github.com/minecraft-addon-tools/minecraft-scripting-types.git", 4, undefined],
+      ["bedrock_studio_schemas_historical", "https://github.com/bedrock-studio/bedrock-json-schemas.git", 4, undefined],
+      ["blockception_molang_historical", "https://github.com/Blockception/BC-Minecraft-Molang.git", 4, undefined],
+      ["magic_method_docs", "https://github.com/notchyves/MagicMethodDocs.git", 4, undefined],
+      ["render_method_docs", "https://github.com/notchyves/RenderMethodDocs.git", 4, undefined],
+    ] as const;
+
+    const byId = new Map(loadSources().map((source) => [source.id, source]));
+    for (const [id, repository, tier, sparsePaths] of expected) {
+      const source = byId.get(id);
+      expect(source, id).toBeDefined();
+      expect(source?.repository, id).toBe(repository);
+      expect(source?.tier, id).toBe(tier);
+      expect(source?.defaultEnabled ?? true, id).toBe(true);
+      if (sparsePaths) expect(source?.sparsePaths, id).toEqual(sparsePaths);
+      expect(source?.include?.length, id).toBeGreaterThan(0);
+    }
+  });
+
+  it("indexes the full official preview schema text surface", () => {
+    const source = loadSources().find((candidate) => candidate.id === "bedrock_schemas_preview");
+    expect(source?.tier).toBe(1);
+    expect(source?.channel).toBe("preview");
+    expect(source?.defaultEnabled).toBe(false);
+    expect(source?.sparsePaths).toEqual(["schemas", "types", "forms"]);
+    expect(source?.include).toContain("catalog.json");
+    expect(source?.include).toContain("types/**/*.d.ts");
+    expect(source?.include).toContain("forms/**/*.json");
+  });
+
   it("keeps beta schemas, protocol data, scripting samples, GameTests, and Editor material preview-only", () => {
     const previewIds = [
       "bedrock_schemas_preview",
