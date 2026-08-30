@@ -378,4 +378,6 @@ Generated deployment state is ignored by Git:
 
 ## License
 
-A project license has not been selected yet.
+The code and documentation in this repository are licensed under the [Apache License, Version 2.0](LICENSE).
+
+Third-party sources indexed by the server retain their own licenses and attribution requirements.
