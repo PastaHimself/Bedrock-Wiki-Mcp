@@ -1,56 +1,76 @@
 # Bedrock Wiki MCP
 
-A self-hosted, read-only Model Context Protocol knowledge server for Minecraft Bedrock Edition add-on development.
+A self-hosted, read-only Model Context Protocol (MCP) server for Minecraft Bedrock Edition add-on development. It indexes official Creator documentation, samples, schemas, Script API package metadata, and selected community sources, then makes that material searchable over Streamable HTTP.
 
-FRE USE: https://bedrockmcpwiki.servegame.net/mcp
+> Beta: The project is still under active development.
 
+Public MCP endpoint: <https://bedrockmcpwiki.servegame.net/mcp>
 
-- this mcp server is still in beta
+## Quick start
 
+Requirements: Node.js 24.x, npm, and Git on `PATH`.
 
-## Status
+Install dependencies and run the full local checks:
 
-The MCP is built as a Bedrock development knowledge service rather than a generic document search server. It combines official Creator documentation, official samples/tools/schemas, official `@minecraft/*` npm package metadata, selected community material, exact identifier indexing, version/channel-aware retrieval, conservative deduplication, and optional local semantic search.
+```bash
+npm ci
+npm run check
+```
 
-The server currently provides:
+Build the stable knowledge index:
 
-- Node.js 24 LTS + TypeScript
-- official Model Context Protocol TypeScript SDK v2
-- Streamable HTTP at `/mcp`
-- health endpoint at `/health`
-- SQLite + FTS5 persistence and lexical retrieval
-- Bedrock-aware Markdown, Script API, JSON, JavaScript, and TypeScript ingestion
-- code-aware TypeScript/JavaScript chunks for functions, classes, interfaces, enums, aliases, arrow functions, and event subscriptions
-- exact identifier lookup for Script API symbols, Bedrock namespaced identifiers, Molang, commands, manifest/schema fields, and animation-controller states
-- derived Script API aliases such as `world.afterEvents.playerSpawn`
-- stable/preview/historical metadata and ranking
-- authoritative read-only npm metadata snapshots for verified `@minecraft/*` Script API modules
-- Minecraft/API version-compatible filtering and ranking
-- intent-aware ranking for definitions, examples, manifests, package versions, debugging, stable, and preview questions
-- deterministic lookup planning that extracts likely identifiers/modules and recommends the next retrieval tool without generating answers
-- conservative cross-source duplicate suppression that preserves distinct versions/channels
-- optional local Transformers.js + sqlite-vec semantic retrieval with lexical fallback
-- controlled `doc_*` / `chk_*` fetching; no arbitrary filesystem reads
-- section-aware fetch context and code/example evidence from `get_definition`
-- verified Microsoft/Mojang Git source ingestion plus lower-ranked community knowledge
-- safe administrative source clone/fetch/fast-forward synchronization
-- source health, provenance, duplicate percentage, and indexing timestamps through `list_sources`
-- online SQLite backups with retention
-- stable and preview retrieval quality suites with per-question rank gates
-- no paid API, embedding API, hosted vector database, or generative model required
+```bash
+npm run dev -- sync-sources
+npm run dev -- rebuild-sources
+npm run dev -- validate-index
+```
+
+Start the server:
+
+```bash
+npm run dev -- serve
+```
+
+The local endpoints are:
+
+```text
+http://127.0.0.1:8080/mcp
+http://127.0.0.1:8080/health
+```
+
+For a lexical-only install that skips the optional semantic-search packages, use `npm ci --omit=optional` and `npm run build`. See [Production deployment](deploy/README.md) for Ubuntu, Caddy, Cloudflare Tunnel, and Pterodactyl instructions.
+
+## What it provides
+
+The server retrieves source material and returns evidence. It does not generate answers. The main capabilities are:
+
+- Node.js 24.x, TypeScript, and the official MCP TypeScript SDK v2
+- Streamable HTTP at `/mcp` and a basic health endpoint at `/health`
+- SQLite with FTS5 for persistent lexical search
+- Markdown, Script API, JSON, JavaScript, and TypeScript ingestion
+- Code-aware chunks for functions, classes, interfaces, enums, aliases, arrow functions, and event subscriptions
+- Exact lookup for Script API symbols, namespaced Bedrock identifiers, Molang, commands, manifest and schema fields, and animation-controller states
+- Derived aliases such as `world.afterEvents.playerSpawn`
+- Stable, preview, and historical metadata with version and release-channel filtering
+- Intent-aware ranking for definitions, examples, manifests, package versions, debugging, stable, and preview queries
+- Deterministic lookup planning through `plan_lookup`
+- Conservative duplicate suppression that preserves differences between versions and release channels
+- Optional local semantic search with Transformers.js and sqlite-vec
+- Controlled fetching through server-issued `doc_*` and `chk_*` identifiers
+- Source provenance, health, indexing timestamps, online backups, and retrieval-quality benchmarks
 
 ## Public MCP tools
 
-The public surface intentionally stays small and read-only:
+| Tool | Purpose |
+| --- | --- |
+| `search` | Search indexed material with exact, lexical, and optional semantic retrieval |
+| `fetch` | Fetch a server-issued document or chunk with bounded context |
+| `get_definition` | Look up an exact identifier with stable-first, version-aware ranking |
+| `list_sources` | List source provenance, trust tier, release channel, health, and indexing details |
+| `list_categories` | List the Bedrock development categories in the index |
+| `plan_lookup` | Classify a query and recommend the next retrieval tool |
 
-- `search` — exact + lexical search, optionally fused with local semantic retrieval; supports optional source/category/channel/module/path/version filters and returns the deterministic query plan used for retrieval
-- `fetch` — fetch server-issued document/chunk IDs with bounded adjacent or heading-section context
-- `get_definition` — exact identifier lookup with stable-first, version-aware handling plus relevant indexed code/examples; it can extract one likely identifier from a short definition question
-- `list_sources` — indexed source provenance, trust tiers, release channel, counts, health, duplicate percentage, revision, and last indexing time
-- `list_categories` — controlled Bedrock development categories currently present in the index
-- `plan_lookup` — deterministic mini helper that reports intent, identifier/module candidates, useful search kinds, and the best next MCP retrieval tool
-
-The public MCP server does **not** expose arbitrary file reads, shell commands, database writes, source synchronization, backup, benchmark, status administration, index-update operations, or free-form answer generation.
+The public MCP surface is read-only. It does not expose arbitrary filesystem reads, shell commands, database writes, source synchronization, backup, benchmark, status administration, index updates, or free-form answer generation.
 
 ## Retrieval behavior
 
@@ -124,35 +144,35 @@ For example, a question such as `What is world.afterEvents.playerSpawn?` is clas
 
 Stable/default-enabled Git sources:
 
-1. `MicrosoftDocs/minecraft-creator` — Tier 1 Creator docs, commands, references, current Script API, and prior Script API.
-2. `Mojang/bedrock-samples` `main` — Tier 2 stable behavior/resource pack samples.
-3. `microsoft/minecraft-samples` — Tier 2 official tutorials and projects.
-4. `Mojang/minecraft-scripting-libraries` — Tier 2 official reusable scripting libraries and examples.
-5. `Mojang/minecraft-debugger` — Tier 2 Bedrock scripting/BDS debugger and diagnostics documentation.
-6. `Mojang/minecraft-creator-tools` — Tier 3 targeted Creator Tools documentation.
-7. `Bedrock-OSS/bedrock-wiki` `wiki` — Tier 3 community documentation. Sparse checkout selects its `docs/` knowledge subtree, and only Markdown knowledge is indexed.
-8. `Bedrock-OSS/bedrock-examples` — Tier 3 maintained behavior/resource-pack example companion to Bedrock Wiki. Sparse checkout selects `resources/`, and include rules retain only JSON, JavaScript, TypeScript, mcfunction, and Markdown evidence rather than binary assets.
-9. `bridge-core/docs` — Tier 3 bridge. editor guides and reference documentation.
-10. `bridge-core/editor-packages` — Tier 3 bridge. schemas and Bedrock file definitions.
-11. `Blockception/minecraft-bedrock-language-server` — Tier 3 language-server diagnostics, project helpers, and IDE tooling.
-12. `Blockception/Minecraft-bedrock-json-schemas` — Tier 3 community behavior/resource-pack schemas.
-13. `JaylyDev/ScriptAPI` `stable` — Tier 3 community Script API samples and packages.
-14. `JannisX11/blockbench` — Tier 3 Blockbench Bedrock format implementation and type definitions.
-15. `Nusiq/mcblend` — Tier 3 Bedrock modeling and animation documentation.
-16. `bedrock-core/server` — Tier 3 addon interoperability framework documentation and packages.
-17. `JannisX11/bedrock-json-schemas` — Tier 3 historical compatibility schemas.
-18. `minecraft-addon-tools/minecraft-addon-toolchain` — Tier 3 historical addon build tooling.
+1. `MicrosoftDocs/minecraft-creator`: Tier 1 Creator docs, commands, references, current Script API, and prior Script API.
+2. `Mojang/bedrock-samples` `main`: Tier 2 stable behavior/resource pack samples.
+3. `microsoft/minecraft-samples`: Tier 2 official tutorials and projects.
+4. `Mojang/minecraft-scripting-libraries`: Tier 2 official reusable scripting libraries and examples.
+5. `Mojang/minecraft-debugger`: Tier 2 Bedrock scripting/BDS debugger and diagnostics documentation.
+6. `Mojang/minecraft-creator-tools`: Tier 3 targeted Creator Tools documentation.
+7. `Bedrock-OSS/bedrock-wiki` `wiki`: Tier 3 community documentation. Sparse checkout selects its `docs/` knowledge subtree, and only Markdown knowledge is indexed.
+8. `Bedrock-OSS/bedrock-examples`: Tier 3 maintained behavior/resource-pack example companion to Bedrock Wiki. Sparse checkout selects `resources/`, and include rules retain only JSON, JavaScript, TypeScript, mcfunction, and Markdown evidence rather than binary assets.
+9. `bridge-core/docs`: Tier 3 bridge. editor guides and reference documentation.
+10. `bridge-core/editor-packages`: Tier 3 bridge. schemas and Bedrock file definitions.
+11. `Blockception/minecraft-bedrock-language-server`: Tier 3 language-server diagnostics, project helpers, and IDE tooling.
+12. `Blockception/Minecraft-bedrock-json-schemas`: Tier 3 community behavior/resource-pack schemas.
+13. `JaylyDev/ScriptAPI` `stable`: Tier 3 community Script API samples and packages.
+14. `JannisX11/blockbench`: Tier 3 Blockbench Bedrock format implementation and type definitions.
+15. `Nusiq/mcblend`: Tier 3 Bedrock modeling and animation documentation.
+16. `bedrock-core/server`: Tier 3 addon interoperability framework documentation and packages.
+17. `JannisX11/bedrock-json-schemas`: Tier 3 historical compatibility schemas.
+18. `minecraft-addon-tools/minecraft-addon-toolchain`: Tier 3 historical addon build tooling.
 
 Stable npm metadata is enabled by default for verified modules including `@minecraft/server`, `@minecraft/server-ui`, and `@minecraft/common`. It preserves exact npm versions/dist-tags and generates stable manifest dependency evidence where appropriate.
 
 Preview-only sources are selected only with `--include-preview` / `BEDROCK_MCP_INCLUDE_PREVIEW=true`:
 
 - `Mojang/bedrock-samples` `preview`.
-- `Mojang/bedrock-schemas` `main` — machine-readable Behavior Pack/Resource Pack JSON Schemas. The upstream head is currently preview-oriented, so it is not treated as stable.
-- `Mojang/bedrock-protocol-docs` `main` — current packet/type/enum metadata and protocol guides. The current Git head is preview-oriented.
-- `microsoft/minecraft-scripting-samples` — Beta Script API examples.
-- `microsoft/minecraft-gametests` — Beta GameTest examples.
-- `Mojang/minecraft-editor`, `Mojang/minecraft-editor-extension-samples`, and `Mojang/minecraft-editor-extension-starter-kit` — Editor/extension material, which is Preview-specific upstream.
+- `Mojang/bedrock-schemas` `main`: machine-readable Behavior Pack/Resource Pack JSON Schemas. The upstream head is currently preview-oriented, so it is not treated as stable.
+- `Mojang/bedrock-protocol-docs` `main`: current packet/type/enum metadata and protocol guides. The current Git head is preview-oriented.
+- `microsoft/minecraft-scripting-samples`: Beta Script API examples.
+- `microsoft/minecraft-gametests`: Beta GameTest examples.
+- `Mojang/minecraft-editor`, `Mojang/minecraft-editor-extension-samples`, and `Mojang/minecraft-editor-extension-starter-kit`: Editor/extension material, which is Preview-specific upstream.
 - official npm beta/RC metadata for verified modules such as `@minecraft/server`, `@minecraft/server-ui`, `@minecraft/server-editor`, `@minecraft/server-gametest`, and other configured `@minecraft/*` packages.
 
 Preview npm versions are stored as exact package/type-definition evidence. The MCP does not assume that a full npm Preview build suffix is automatically a valid `manifest.json` dependency version; manifest guidance must be supported by matching official documentation/sample evidence.
