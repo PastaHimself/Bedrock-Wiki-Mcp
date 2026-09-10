@@ -257,7 +257,13 @@ export function registerIntelligenceTools(
     },
     async (args) => {
       try {
-        return textResult(compareIdentifierVersions(requireDatabase(database), args));
+        return textResult(compareIdentifierVersions(requireDatabase(database), {
+          identifier: args.identifier,
+          versionKind: args.versionKind,
+          fromVersion: args.fromVersion,
+          toVersion: args.toVersion,
+          ...(args.includePreview !== undefined ? { includePreview: args.includePreview } : {}),
+        }));
       } catch (error) {
         return toolError(error);
       }
@@ -286,7 +292,12 @@ export function registerIntelligenceTools(
     },
     async (args) => {
       try {
-        return textResult(resolveRelationships(requireDatabase(database), args));
+        return textResult(resolveRelationships(requireDatabase(database), {
+          identifier: args.identifier,
+          ...(args.relation !== undefined ? { relation: args.relation } : {}),
+          ...(args.depth !== undefined ? { depth: args.depth } : {}),
+          ...(args.limit !== undefined ? { limit: args.limit } : {}),
+        }));
       } catch (error) {
         return toolError(error);
       }
