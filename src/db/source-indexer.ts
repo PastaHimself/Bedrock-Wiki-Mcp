@@ -11,6 +11,7 @@ import { deriveScriptApiAliases } from "./aliases.js";
 import { openDatabase } from "./connection.js";
 import { migrateDatabase } from "./migrate.js";
 import { IndexRepository } from "./repository.js";
+import { sourceInputIdentity, writeSourceInputIdentity } from "./source-input.js";
 import { validateIndex, type IndexValidationReport } from "./validate.js";
 
 export interface SourceIndexStats {
@@ -50,6 +51,7 @@ async function indexSource(
   repository: IndexRepository,
   source: SourceDescriptor,
   revision: string,
+  inputIdentity: string,
   documentsIterable: AsyncIterable<ParsedDocument>,
 ): Promise<SourceIndexStats> {
   const startedAt = new Date().toISOString();
@@ -83,6 +85,7 @@ async function indexSource(
         added_files, documents_changed, chunks_changed
       ) VALUES (?, ?, ?, ?, 'completed', ?, ?, ?)
     `).run(source.id, revision, startedAt, completedAt, documents, documents, chunks);
+    writeSourceInputIdentity(database, source.id, inputIdentity);
     database.exec("COMMIT");
   } catch (error) {
     if (database.isTransaction) database.exec("ROLLBACK");
@@ -124,6 +127,7 @@ export async function rebuildConfiguredSourcesIndex(
         repository,
         source,
         checkout.revision,
+        sourceInputIdentity(sourceConfig),
         walkSourceCheckoutDocuments(checkout),
       ));
     }
@@ -142,6 +146,7 @@ export async function rebuildConfiguredSourcesIndex(
           repository,
           snapshot.source,
           snapshot.manifest.revision,
+          sourceInputIdentity(npmConfig),
           walkNpmSnapshotDocuments(snapshot),
         ));
       }
