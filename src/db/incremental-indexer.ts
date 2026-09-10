@@ -12,6 +12,12 @@ import { resetDerivedIndexData } from "./derived-reset.js";
 import { migrateDatabase } from "./migrate.js";
 import { IndexRepository } from "./repository.js";
 import {
+  readSourceInputIdentity,
+  removeSourceInputIdentity,
+  sourceInputIdentity,
+  writeSourceInputIdentity,
+} from "./source-input.js";
+import {
   rebuildConfiguredSourcesIndex,
   type RebuildSourcesIndexOptions,
   type SourceIndexStats,
@@ -132,10 +138,12 @@ async function updateSource(
   repository: IndexRepository,
   source: SourceDescriptor,
   revision: string,
+  inputIdentity: string,
   documentsIterable: AsyncIterable<ParsedDocument>,
 ): Promise<IncrementalSourceResult> {
   const previousRevision = existingRevision(database, source.id);
-  if (previousRevision === revision) {
+  const previousInputIdentity = readSourceInputIdentity(database, source.id);
+  if (previousRevision === revision && previousInputIdentity === inputIdentity) {
     const stats = sourceStats(database, source.id, revision);
     return {
       stats,
@@ -211,6 +219,7 @@ async function updateSource(
       added + modified + deleted,
       chunksChanged,
     );
+    writeSourceInputIdentity(database, source.id, inputIdentity);
     database.exec("COMMIT");
   } catch (error) {
     if (database.isTransaction) database.exec("ROLLBACK");
@@ -245,7 +254,9 @@ function removeUnselectedSources(database: DatabaseSync, repository: IndexReposi
     }
   }
   for (const row of database.prepare("SELECT id FROM sources").all() as unknown as Array<{ id: string }>) {
-    if (!selectedIds.has(row.id)) database.prepare("DELETE FROM sources WHERE id = ?").run(row.id);
+    if (selectedIds.has(row.id)) continue;
+    database.prepare("DELETE FROM sources WHERE id = ?").run(row.id);
+    removeSourceInputIdentity(database, row.id);
   }
   return { documents, chunks };
 }
@@ -302,6 +313,7 @@ export async function updateConfiguredSourcesIndex(
         repository,
         source,
         checkout.revision,
+        sourceInputIdentity(sourceConfig),
         walkSourceCheckoutDocuments(checkout),
       ));
     }
@@ -313,6 +325,7 @@ export async function updateConfiguredSourcesIndex(
         repository,
         snapshot.source,
         snapshot.manifest.revision,
+        sourceInputIdentity(npmConfig),
         walkNpmSnapshotDocuments(snapshot),
       ));
     }
