@@ -180,7 +180,8 @@ export function compareIdentifierVersions(database: DatabaseSync, options: Versi
   if (!from && !to) status = "not_found";
   else if (!from && to) status = "added";
   else if (from && !to) status = "removed";
-  else if (from?.contentHash === to?.contentHash
+  else if (from && to
+    && from.contentHash === to.contentHash
     && from.stability === to.stability
     && from.lifecycle === to.lifecycle
     && from.symbolKind === to.symbolKind) status = "unchanged";
