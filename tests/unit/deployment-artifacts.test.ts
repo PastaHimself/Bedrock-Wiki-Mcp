@@ -20,11 +20,11 @@ describe("production deployment artifacts", () => {
     expect(unit).not.toContain("0.0.0.0");
   });
 
-  it("backs up, refreshes lexical/semantic knowledge, then restarts the server", async () => {
+  it("backs up, incrementally refreshes lexical/semantic knowledge, then restarts the server", async () => {
     const script = await text("deploy/scripts/update-knowledge.sh");
     const backup = script.indexOf("dist/index.js backup");
     const sync = script.indexOf("dist/index.js sync-sources");
-    const rebuild = script.indexOf("dist/index.js rebuild-sources");
+    const update = script.indexOf("dist/index.js update-sources");
     const validate = script.indexOf("dist/index.js validate-index");
     const semantic = script.indexOf("dist/index.js build-semantic-index");
     expect(script).toContain("flock -n");
@@ -32,11 +32,11 @@ describe("production deployment artifacts", () => {
     expect(script).toContain("BEDROCK_MCP_BACKUP_RETAIN");
     expect(script).toContain("BEDROCK_MCP_MIN_FREE_BYTES");
     expect(script).toContain("df -B1 --output=avail");
-    expect(script).toContain("require_free_space \"before lexical rebuild\"");
+    expect(script).toContain("require_free_space \"before lexical update\"");
     expect(backup).toBeGreaterThan(0);
     expect(sync).toBeGreaterThan(backup);
-    expect(rebuild).toBeGreaterThan(sync);
-    expect(validate).toBeGreaterThan(rebuild);
+    expect(update).toBeGreaterThan(sync);
+    expect(validate).toBeGreaterThan(update);
     expect(semantic).toBeGreaterThan(validate);
 
     const unit = await text("deploy/systemd/bedrock-mcp-update.service");

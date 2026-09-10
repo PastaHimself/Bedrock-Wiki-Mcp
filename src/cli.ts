@@ -8,6 +8,7 @@ import { loadRuntimeConfig } from "./config.js";
 import { MCP_PATH, SERVICE_NAME, SERVICE_VERSION } from "./constants.js";
 import { openDatabase } from "./db/connection.js";
 import { rebuildLocalIndex } from "./db/indexer.js";
+import { updateConfiguredSourcesIndex } from "./db/incremental-indexer.js";
 import { getSchemaVersion, migrateDatabase } from "./db/migrate.js";
 import { SCHEMA_VERSION } from "./db/migrations/0001-initial.js";
 import { rebuildConfiguredSourcesIndex } from "./db/source-indexer.js";
@@ -29,9 +30,11 @@ Usage:
   bedrock-mcp sync-sources [checkout-root]           Clone/fetch configured source checkouts and npm metadata
                          [--include-preview]          Include preview sources disabled by default
   bedrock-mcp rebuild-index [directory]              Rebuild the local curated knowledge index
-  bedrock-mcp rebuild-sources [checkout-root]        Rebuild from configured official source snapshots
+  bedrock-mcp rebuild-sources [checkout-root]        Full rebuild from configured official source snapshots
                          [--include-preview]          Include preview sources disabled by default
-  bedrock-mcp build-semantic-index                   Build optional local vector index from bedrock.db
+  bedrock-mcp update-sources [checkout-root]         Atomically update only changed configured source content
+                         [--include-preview]          Include preview sources disabled by default
+  bedrock-mcp build-semantic-index                   Build/update vectors, reusing unchanged embeddings when possible
   bedrock-mcp status [--json]                        Show index health, counts, revisions, and source coverage
   bedrock-mcp backup [destination] [--retain=N]      Create online SQLite/config/local-knowledge backup
   bedrock-mcp benchmark [file] [--json]              Run retrieval quality benchmark (default: benchmarks/search-queries.json)
@@ -148,6 +151,23 @@ async function rebuildSources(args: readonly string[]): Promise<number> {
   return 0;
 }
 
+async function updateSources(args: readonly string[]): Promise<number> {
+  const parsed = sourceCommandArguments("update-sources", args);
+  const config = loadRuntimeConfig();
+  const includePreview = parsed.includePreview || config.includePreview || false;
+  const result = await updateConfiguredSourcesIndex({
+    dataDir: config.dataDir,
+    includePreview,
+    ...(parsed.checkoutRoot ? { checkoutRoot: parsed.checkoutRoot } : {}),
+  });
+  process.stdout.write(
+    `${result.incremental ? "Incremental update" : "Initial full build"}: ${result.sourcesChanged} source revision(s) changed; `
+      + `${result.documentsAdded} documents added, ${result.documentsModified} modified, ${result.documentsDeleted} deleted, `
+      + `${result.documentsUnchanged} unchanged; ${result.chunksChanged} affected chunks; ${result.aliasesDerived} derived aliases in ${result.targetPath}.\n`,
+  );
+  return 0;
+}
+
 async function buildSemanticIndex(): Promise<number> {
   const config = loadRuntimeConfig();
   const database = openServingDatabase(indexPath(config.dataDir));
@@ -160,7 +180,7 @@ async function buildSemanticIndex(): Promise<number> {
     });
     const result = await rebuildSemanticIndex(database, semanticIndexPath(config.dataDir), embedder);
     process.stdout.write(
-      `Embedded ${result.chunksEmbedded} chunks with ${result.model} (${result.dimensions} dimensions) into ${result.targetPath}.\n`,
+      `Semantic index: ${result.chunksEmbedded} embedded, ${result.chunksReused} reused, ${result.chunksTotal} total with ${result.model} (${result.dimensions} dimensions) into ${result.targetPath}.\n`,
     );
     return 0;
   } finally {
@@ -343,6 +363,7 @@ export async function runCli(args: readonly string[] = process.argv.slice(2)): P
   if (command === "sync-sources") return syncSources(args.slice(1));
   if (command === "rebuild-index") return rebuildIndex(args[1]);
   if (command === "rebuild-sources") return rebuildSources(args.slice(1));
+  if (command === "update-sources") return updateSources(args.slice(1));
   if (command === "build-semantic-index") return buildSemanticIndex();
   if (command === "status") return statusCommand(args.slice(1));
   if (command === "backup") return backupCommand(args.slice(1));

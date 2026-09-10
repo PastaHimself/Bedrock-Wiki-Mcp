@@ -2,6 +2,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { McpServer } from "@modelcontextprotocol/server";
 import { SERVICE_NAME, SERVICE_VERSION } from "./constants.js";
 import type { SemanticRetriever } from "./semantic/retriever.js";
+import { registerIntelligenceTools } from "./tools/register-intelligence.js";
 import { registerKnowledgeTools } from "./tools/register.js";
 
 export function createBedrockMcpServer(
@@ -16,5 +17,6 @@ export function createBedrockMcpServer(
     version: SERVICE_VERSION,
   });
   registerKnowledgeTools(server, database, semantic, semanticTopK);
+  registerIntelligenceTools(server, database, semantic, semanticTopK);
   return server;
 }

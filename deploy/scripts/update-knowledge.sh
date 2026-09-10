@@ -129,10 +129,10 @@ echo "Synchronizing configured Bedrock knowledge sources..."
 
 lexical_bytes="$(file_size_bytes "$LEXICAL_PATH")"
 replacement_peak_bytes=$((lexical_bytes + lexical_bytes / 2))
-require_free_space "before lexical rebuild" "$replacement_peak_bytes"
+require_free_space "before lexical update" "$replacement_peak_bytes"
 
-echo "Building a validated replacement index..."
-"$NODE_BIN" dist/index.js rebuild-sources "${root_args[@]}" "${preview_args[@]}"
+echo "Building a validated atomic incremental index..."
+"$NODE_BIN" dist/index.js update-sources "${root_args[@]}" "${preview_args[@]}"
 
 echo "Validating published lexical index..."
 "$NODE_BIN" dist/index.js validate-index
@@ -140,8 +140,8 @@ echo "Validating published lexical index..."
 if [[ "$build_semantic" == true ]]; then
   semantic_bytes="$(file_size_bytes "$SEMANTIC_PATH")"
   semantic_peak_bytes=$((semantic_bytes + semantic_bytes / 2))
-  require_free_space "before semantic rebuild" "$semantic_peak_bytes"
-  echo "Building semantic index for the published lexical index..."
+  require_free_space "before semantic update" "$semantic_peak_bytes"
+  echo "Updating semantic index and reusing unchanged embeddings..."
   "$NODE_BIN" dist/index.js build-semantic-index
 fi
 
