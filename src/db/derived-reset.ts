@@ -7,16 +7,16 @@ interface IdentifierRow {
 }
 
 /**
- * Remove data produced by post-index derivation and restore each FTS alias field
- * from exact identifiers before deriveScriptApiAliases runs again.
+ * Remove data produced by Script API alias derivation and restore each FTS
+ * alias field from exact identifiers before deriveScriptApiAliases runs again.
  *
- * Full rebuilds start with an empty database; incremental rebuilds need this
- * explicit reset so removed or changed type relationships cannot leave stale
- * derived aliases in either identifiers, symbol_edges, or FTS text.
+ * Only relations owned by the alias derivation pass are cleared so future
+ * independently-derived graph relations are not discarded by incremental
+ * refreshes.
  */
 export function resetDerivedIndexData(database: DatabaseSync): void {
   database.prepare("DELETE FROM identifiers WHERE alias_type = 'derived-chain'").run();
-  database.prepare("DELETE FROM symbol_edges").run();
+  database.prepare("DELETE FROM symbol_edges WHERE relation IN ('property_type', 'alias_of')").run();
 
   const rows = database.prepare(`
     SELECT chunk_id, identifier
